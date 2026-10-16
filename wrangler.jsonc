@@ -1,0 +1,9 @@
+{
+  // Cloudflare Worker that serves the PWA as static files.
+  // Deploy: npx wrangler deploy   (updates the existing "mandoub-mestk" worker)
+  "name": "mandoub-mestk",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public"
+  }
+}
