@@ -12,7 +12,8 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <script>document.documentElement.dir="rtl";document.documentElement.lang="ar";</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap">
+<!-- the font never blocks the first paint: on a slow line the app opens with the system font and switches when Cairo arrives -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Layout: one-column phone app — sticky header, scrolling view, fixed bottom nav + capture button */
 :root{
@@ -232,6 +233,12 @@ textarea.inp{min-height:84px;resize:vertical}
   <button data-go="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/></svg>الفلوس</button>
 </div></nav>
 
+<script>
+// if anything breaks, say so on screen so the rep can send a screenshot instead of staring at a blank page
+window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr");if(!el){el=document.createElement("div");el.id="bootErr";
+  el.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:999;background:#B23A2E;color:#fff;padding:12px 14px;border-radius:12px;font:600 14px/1.6 system-ui,sans-serif;direction:rtl";
+  document.body.appendChild(el)}el.textContent="حصلت مشكلة في التطبيق. صوّر الشاشة دي وابعتها: "+(e.message||"")+" ("+(e.filename||"").split("/").pop()+":"+(e.lineno||"")+")"}catch(x){}});
+</script>
 <script src="catalog.js"></script>
 <script>
 (function(){
@@ -551,7 +558,12 @@ function requestSheet(id){const r=S.requests.find(x=>x.id===id);const c=cust(r.c
 
 /* ---------- catalog browsing ---------- */
 filt.co=CAT.companies[0]?.id||"";filt.pcat="الكل";filt.pq="";
-const imgHTML=p=>p&&p.img?`<img src="${esc(p.img)}" alt="" loading="lazy" decoding="async">`:`<span class="ph">مفيش صورة</span>`;
+// photos live in catalog-img.js, loaded after the app opens; until then a placeholder holds the spot
+const photo=p=>p&&p.img&&self.CATIMG?self.CATIMG[p.img]:null;
+const imgHTML=p=>{const src=photo(p);return src?`<img src="${src}" alt="" decoding="async">`:p&&p.img?`<span class="ph" data-ph="${esc(p.img)}">…</span>`:`<span class="ph">مفيش صورة</span>`};
+function loadPhotos(){const sc=document.createElement("script");sc.src="catalog-img.js";
+  sc.onload=()=>document.querySelectorAll("[data-ph]").forEach(el=>{const src=self.CATIMG&&self.CATIMG[el.dataset.ph];if(src)el.outerHTML=`<img src="${src}" alt="" decoding="async">`});
+  document.body.appendChild(sc)}
 const priceTxt=p=>`${money(p.price)} ج للقطعة`;
 // search ignores the company and category tabs, so a name typed anywhere is found
 function findProducts(co,cat,q){q=(q||"").trim();
@@ -680,7 +692,7 @@ async function orderImage(o,isEdit){
   const F="Cairo,system-ui,Tahoma,sans-serif";
   try{await Promise.all([document.fonts.load(`800 40px Cairo`),document.fonts.load(`700 30px Cairo`),document.fonts.load(`600 24px Cairo`)])}catch(e){}
   const c=cust(o.customerId),gs=groups(o),W=1080,P=44,TH=150,RH=176;
-  const imgs={};await Promise.all(o.items.map(async i=>{const p=i.pid&&prod(i.pid);if(p&&p.img&&!(p.img in imgs))imgs[p.img]=await loadImg(p.img)}));
+  const imgs={};await Promise.all(o.items.map(async i=>{const p=i.pid&&prod(i.pid);if(p&&p.img&&!(p.img in imgs))imgs[p.img]=await loadImg(photo(p))}));
   const cv=document.createElement("canvas"),ctx=cv.getContext("2d");
   ctx.font=`600 26px ${F}`;const noteLines=o.note?wrap(ctx,"ملاحظة: "+o.note,W-2*P):[];
   const H=250+gs.length*64+o.items.length*(RH+12)+(noteLines.length?noteLines.length*40+30:0)+110;
@@ -838,7 +850,7 @@ function settingsSheet(){const s=S.settings;
 }
 
 /* ---------- boot ---------- */
-render();
+render();loadPhotos();
 if("serviceWorker" in navigator&&window.isSecureContext&&window.top===window.self){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)render()});
 })();
