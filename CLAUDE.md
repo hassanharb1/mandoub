@@ -15,17 +15,21 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 ## What the app does (v1, in production)
 - **النهارده (Home):** cash in hand, money still owed by customers, collected today, orders today, plus a «محتاج تفتكر» list. That list shows unsent draft orders, sent orders nobody confirmed, customers waiting for something, customers who broke their usual ordering rhythm, and overdue balances.
 - **العملاء (Customers):** list sorted by balance. A visit screen shows the balance, open orders, pending requests, what the customer usually buys, a "repeat last order" button and a ledger.
-- **طلب جديد (New order):** pick a customer and products (search, categories, +/− buttons, plus a free-text item). Save as a draft, or send as a numbered, formatted **WhatsApp message to the colleague** through a `wa.me` link. Order status steps: draft → sent → registered → shipped → delivered.
+- **طلب جديد (New order):** pick a customer, then products by company tab (إيفورا / وايت لايت / «اخترت»), search (name or code, across both companies) and category chips. Each product row has its photo (tap to enlarge), price per piece, a **ق (قطعة) / ك (كرتونة)** unit toggle and +/−. For ك the rep types how many pieces are in a carton (remembered per product in `S.carton`); a carton line without that count is left out of the total. A free-text item is still possible. Save as a draft, or send.
+- **Sending:** the send sheet draws the order as a **picture with the product photos** (canvas → JPEG) and shares it **together with the text message** through the phone's share menu (Web Share API with files; the rep picks WhatsApp then the colleague). «رسالة بس» still opens `wa.me` with the text only. Order status steps: draft → sent → registered → shipped → delivered.
+- **المنتجات (Catalog tab):** browse both price lists as a photo grid, search, tap a product to enlarge it or start an order with it.
 - **سجّل بسرعة (Quick capture):** customer plus free text (or voice), saved as a pending request until it is converted to an order or closed.
-- **الفلوس (Money):** record collections, record «سلّمت للشركة» handovers to the company, cash in hand = collections − handovers, money owed, and recent movements.
+- **الفلوس (Money):** record collections, record «سلّمت للشركة» handovers to the company, cash in hand = collections − handovers, money owed, and recent movements. Collections and handovers have a **date (day picker, weekday shown)** and can be **edited or deleted** by tapping them (in الفلوس or the customer's ledger).
+- **رصيد أول المدة (opening balance):** flexible — عليه (owes) or ليه (credit, stored negative), with a «لحد يوم» date (`openingDate`); editable from the customer form or by tapping it in the ledger.
 - **Settings:** rep name, colleague name and WhatsApp number, a reminder delay for unsent orders, backup and restore as JSON, clearing the demo data, restoring the demo data.
 - **Commission was removed on purpose.** Hassan asked for that. Do not add it back.
 
 ## Tech
-- One self-contained file, `public/index.html`, written in vanilla JS with no framework and no build step, plus `sw.js` (offline cache), `manifest.json` and the icons.
-- Data lives in **localStorage** under the key `mandoub.v1`, as one JSON state object `S`: `settings, products, customers, orders, requests, payments, handovers, seq, demo, since, lastBackup`.
+- One self-contained file, `public/index.html`, written in vanilla JS with no framework and no build step, plus `catalog.js` (the product list), `img/p/*.webp` (product photos), `sw.js` (offline cache), `manifest.json` and the icons.
+- Data lives in **localStorage** under the key `mandoub.v1`, as one JSON state object `S`: `settings, products, carton, customers, orders, requests, payments, handovers, seq, demo, since, lastBackup`. Products are **not** in `S`: they come from `catalog.js` (`self.CATALOG`); `S.products` only keeps products from older versions so old orders still resolve. Order items: `{pid, qty, unit:"ق"|"ك", per, price, name}` (name and price are a snapshot).
 - A customer's balance = `opening` + totals of orders with status **delivered** − payments.
-- The app ships with **demo data** (fictional customers and products, marked by a banner). Products and prices are placeholders until Hassan sends the company's real product list.
+- **Products:** 228 real products from two company price lists Hassan sent (Aug 2026): **إيفورا** (Evora, 12-page scanned PDF, hand-transcribed; prices exclude VAT) and **وايت لايت** (White Light, 9-page table). Prices are per piece. Photos were cropped from the PDFs, ~320px WebP, ~1 MB total. To update prices, edit `catalog.js` directly; for a new list, re-extract.
+- The app ships with **demo data** (fictional customers and orders, marked by a banner) that uses real catalog products. On boot, an old demo state (placeholder products `p1…p16`) is replaced by the new demo, keeping settings; non-demo data is never touched.
 - On boot the app calls `navigator.storage.persist()`. A backup-reminder card appears on Home after 3 days without a backup, but only when demo mode is off.
 - **Voice:** the Web Speech API (`ar-EG`) is used on Android only, with an 8 s no-speech watchdog and a 25 s hard stop. On **iOS the mic button is hidden** and a hint points to the keyboard's own mic, because Web Speech hangs in iOS home-screen web apps.
 - Design: MESTK brand colors (Charcoal `#282825`, Burnt Orange `#BD572F`, Warm Cream `#F5F0E7`), the Cairo font, RTL, light and dark themes through CSS tokens. Body text is about 15px, tap targets are at least 36px, and the side gutter is 16px.
@@ -34,7 +38,7 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **Live URL:** https://mandoub-mestk.hassan-mestkawy.workers.dev, served as a Cloudflare Worker with static assets. Hassan's Cloudflare account also hosts easy-drive-system and mestk-platform.
 - **Netlify is not an option:** `*.netlify.app` is blocked in Egypt (ERR_CONNECTION_TIMED_OUT without a VPN).
 - Deploy from this folder with `npx wrangler deploy` (it reads `wrangler.jsonc`, the worker name `mandoub-mestk` and the `./public` folder). The first run asks Hassan to log in with `npx wrangler login`. A manual alternative: Cloudflare dashboard → mandoub-mestk → New deployment → upload the `public` folder.
-- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v4`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
+- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v5`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
 
 ## How to test
 - `npx serve public` or `python -m http.server -d public`, then open it at a phone width (about 360–400px) in DevTools device mode.
@@ -50,7 +54,7 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
    - each customer's frequent products shown first
    - a 3-screen first-run guide
    - rarely used things (full ledger, settings) moved out of the way
-3. **Replace the demo products with the company's real product list** once Hassan sends it.
+3. ~~Replace the demo products with the real product list~~ — done (إيفورا + وايت لايت). Open question: pieces per carton per product (now typed by the rep).
 4. **Cloud backup and sync with Supabase** (chosen over Cloudflare D1 because it has built-in auth and row-level security). Use email login rather than SMS OTP, which costs per message. Keep the app offline-first and sync when online. Hosting stays on Cloudflare.
 5. Later: an Android APK (for reliable daily notifications), then a multi-rep, multi-company **SaaS** with a colleague/manager screen that receives orders directly instead of over WhatsApp.
 

@@ -14,4 +14,4 @@
 ## تنزل تحديث
 `npx wrangler deploy` من جوه الفولدر ده
 أو من موقع Cloudflare: مشروع mandoub-mestk ← New deployment ← ارفع فولدر `public`
-وقبل أي تحديث غيّر رقم النسخة في `public/sw.js` (مثلًا mandoub-v4 ← mandoub-v5)
+وقبل أي تحديث غيّر رقم النسخة في `public/sw.js` (مثلًا mandoub-v5 ← mandoub-v6)
