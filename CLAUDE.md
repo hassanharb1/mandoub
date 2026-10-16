@@ -25,10 +25,10 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **Commission was removed on purpose.** Hassan asked for that. Do not add it back.
 
 ## Tech
-- One self-contained file, `public/index.html`, written in vanilla JS with no framework and no build step, plus `catalog.js` (the product list), `img/p/*.webp` (product photos), `sw.js` (offline cache), `manifest.json` and the icons.
+- One self-contained file, `public/index.html`, written in vanilla JS with no framework and no build step, plus `catalog.js` (the product list, with each photo embedded as a WebP data URI — no image folder, so a dashboard upload can't miss it), `sw.js` (offline cache), `manifest.json` and the icons.
 - Data lives in **localStorage** under the key `mandoub.v1`, as one JSON state object `S`: `settings, products, carton, customers, orders, requests, payments, handovers, seq, demo, since, lastBackup`. Products are **not** in `S`: they come from `catalog.js` (`self.CATALOG`); `S.products` only keeps products from older versions so old orders still resolve. Order items: `{pid, qty, unit:"ق"|"ك", per, price, name}` (name and price are a snapshot).
 - A customer's balance = `opening` + totals of orders with status **delivered** − payments.
-- **Products:** 228 real products from two company price lists Hassan sent (Aug 2026): **إيفورا** (Evora, 12-page scanned PDF, hand-transcribed; prices exclude VAT) and **وايت لايت** (White Light, 9-page table). Prices are per piece. Photos were cropped from the PDFs, ~320px WebP, ~1 MB total. To update prices, edit `catalog.js` directly; for a new list, re-extract.
+- **Products:** 228 real products from two company price lists Hassan sent (Aug 2026): **إيفورا** (Evora, 12-page scanned PDF, hand-transcribed; prices exclude VAT) and **وايت لايت** (White Light, 9-page table). Prices are per piece. Photos were cropped from the PDFs, ~320px WebP embedded in `catalog.js` (~1 MB). To update prices, edit `catalog.js` directly; for a new list, re-extract.
 - The app ships with **demo data** (fictional customers and orders, marked by a banner) that uses real catalog products. On boot, an old demo state (placeholder products `p1…p16`) is replaced by the new demo, keeping settings; non-demo data is never touched.
 - On boot the app calls `navigator.storage.persist()`. A backup-reminder card appears on Home after 3 days without a backup, but only when demo mode is off.
 - **Voice:** the Web Speech API (`ar-EG`) is used on Android only, with an 8 s no-speech watchdog and a 25 s hard stop. On **iOS the mic button is hidden** and a hint points to the keyboard's own mic, because Web Speech hangs in iOS home-screen web apps.
@@ -38,7 +38,7 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **Live URL:** https://mandoub-mestk.hassan-mestkawy.workers.dev, served as a Cloudflare Worker with static assets. Hassan's Cloudflare account also hosts easy-drive-system and mestk-platform.
 - **Netlify is not an option:** `*.netlify.app` is blocked in Egypt (ERR_CONNECTION_TIMED_OUT without a VPN).
 - Deploy from this folder with `npx wrangler deploy` (it reads `wrangler.jsonc`, the worker name `mandoub-mestk` and the `./public` folder). The first run asks Hassan to log in with `npx wrangler login`. A manual alternative: Cloudflare dashboard → mandoub-mestk → New deployment → upload the `public` folder.
-- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v6`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
+- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v7`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
 
 ## How to test
 - `npx serve public` or `python -m http.server -d public`, then open it at a phone width (about 360–400px) in DevTools device mode.
