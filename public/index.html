@@ -575,7 +575,7 @@ function loadPhotos(){const sc=document.createElement("script");sc.src="catalog-
 const priceTxt=p=>`${money(p.price)} ج للقطعة`;
 // colours named in the product name (e.g. "ابيض/اسود") become quick picks on the order line
 const COLORS=["ابيض دهبي","اسود دهبي","ابيض","اسود","ورم","دهبي","فضي","RGB"];
-function colorsOf(p){let n=p.name;const out=[];COLORS.forEach(c=>{if(n.includes(c)){out.push(c);n=n.split(c).join(" ")}});return out}
+function colorsOf(p){let n=p.name;const out=[];COLORS.forEach(c=>{if(n.includes(c)){out.push(c);n=n.split(c).join(" ")}});return out.length>1?out:[]}
 // search ignores the company and category tabs, so a name typed anywhere is found
 function findProducts(co,cat,q){q=(q||"").trim();
   if(q){const ws=q.split(/\s+/);return CAT.products.filter(p=>ws.every(w=>(p.name+" "+(p.code||"")+" "+coName(p.co)).includes(w)))}
@@ -721,7 +721,7 @@ async function orderImage(o,isEdit){
   const imgs={};await Promise.all(o.items.map(async i=>{const p=i.pid&&prod(i.pid);if(p&&p.img&&!(p.img in imgs))imgs[p.img]=await loadImg(photo(p))}));
   const cv=document.createElement("canvas"),ctx=cv.getContext("2d");
   ctx.font=`600 26px ${F}`;const noteLines=o.note?wrap(ctx,"ملاحظة: "+o.note,W-2*P):[];
-  const H=250+gs.length*64+o.items.length*(RH+12)+(noteLines.length?noteLines.length*40+30:0)+110;
+  const H=250+(o.disc||o.pay?92:0)+gs.length*64+o.items.length*(RH+12)+(noteLines.length?noteLines.length*40+30:0)+110;
   cv.width=W;cv.height=H;ctx.direction="rtl";ctx.textBaseline="middle";
   const R=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
   ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);
@@ -729,9 +729,12 @@ async function orderImage(o,isEdit){
   R(0,0,W,200,0,"#282825");ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;
   ctx.fillText(`${isEdit?"تعديل على ":""}طلب رقم ${o.no}`,W-P,62);
   ctx.font=`700 32px ${F}`;ctx.fillText(c.name+(c.owner?` (${c.owner})`:""),W-P,120);
-  ctx.font=`600 24px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText([c.area,fmtDay(o.created),o.disc?`خصم ${o.disc}%`:null,o.pay?PAY[o.pay]:null].filter(Boolean).join(" · "),W-P,166);
+  ctx.font=`600 24px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText([c.area,fmtDay(o.created)].filter(Boolean).join(" · "),W-P,166);
   ctx.textAlign="left";ctx.fillStyle="#E07A4F";ctx.font=`800 30px ${F}`;ctx.fillText(`${o.items.length} صنف`,P,62);
   let y=224;
+  // discount and payment get their own strip so the colleague can't miss them
+  const terms=[o.disc?`خصم العميل ${o.disc}%`:null,o.pay?`الدفع: ${PAY[o.pay]}`:null].filter(Boolean).join("   ·   ");
+  if(terms){R(P,y,W-2*P,72,18,"#F6E2D8");ctx.textAlign="center";ctx.fillStyle="#BD572F";ctx.font=`800 32px ${F}`;ctx.fillText(terms,W/2,y+38);y+=92}
   for(const g of gs){
     if(gs.length>1){ctx.textAlign="right";ctx.fillStyle="#BD572F";ctx.font=`800 30px ${F}`;ctx.fillText(g.k,W-P,y+26);y+=64}
     for(const i of g.items){const p=i.pid&&prod(i.pid);
