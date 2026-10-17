@@ -321,12 +321,12 @@ function seed(){
     {id:uid(),customerId:"c8",amount:1500,date:at(6),note:"كاش"},{id:uid(),customerId:"c4",amount:1200,date:at(4),note:""},
     {id:uid(),customerId:"c5",amount:1375,date:at(1),note:""},{id:uid(),customerId:"c6",amount:2000,date:at(0,10),note:"كاش"}];
   const handovers=[{id:uid(),amount:7500,date:at(5),note:"تسليم للحسابات"},{id:uid(),amount:2500,date:at(2),note:""}];
-  return {v:1,demo:true,seq:no,since:Date.now(),lastBackup:0,settings:{rep:"",colleague:"مصطفى",phone:"",rate:2,basis:"collection",remind:1},products:[],carton:{},customers,orders,requests,payments,handovers};
+  return {v:1,demo:true,seq:no,since:Date.now(),lastBackup:0,settings:{rep:"",colleague:"مصطفى",phone:"",rate:2,basis:"collection",remind:1},products:[],carton:{},customers,orders,requests,payments,handovers,adjusts:[]};
 }
 let S=load();
 // old demo data used placeholder products (p1…p16): swap it for the new demo, keeping the settings. Real data is never touched.
 if(S&&S.demo&&(S.products||[]).some(p=>p.id==="p1")){const keep={...S.settings};S=seed();S.settings=keep}
-S=S||seed();if(!S.since)S.since=Date.now();if(!S.carton)S.carton={};if(!S.products)S.products=[];save();
+S=S||seed();if(!S.since)S.since=Date.now();if(!S.carton)S.carton={};if(!S.products)S.products=[];if(!S.adjusts)S.adjusts=[];save();
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persisted().then(p=>{if(!p)navigator.storage.persist()}).catch(()=>{})}catch(e){}
 
 /* ---------- helpers ---------- */
@@ -353,7 +353,9 @@ function when(t){const d=daysSince(t);const w=WD[new Date(t).getDay()];
   if(d<=0)return"النهارده";if(d===1)return"امبارح";if(d===2)return`يوم ${w} (من يومين)`;if(d<7)return`يوم ${w} (من ${d} أيام)`;if(d<=10)return`من ${d} أيام`;return`من ${d} يوم`}
 function itemName(i){return i.name||prod(i.pid)?.name||"منتج"}
 // orders carry no reliable money amount (carton prices are unknown), so the balance is opening − collections
+// what the customer owes = opening + the rep's own adjustments (amount added, or set to match the company) − collections
 function balance(cid){const c=cust(cid);let b=c.opening||0;
+  (S.adjusts||[]).forEach(a=>{if(a.customerId===cid)b+=a.amount});
   S.payments.forEach(p=>{if(p.customerId===cid)b-=p.amount});return b}
 function lastPayment(cid){return S.payments.filter(p=>p.customerId===cid).reduce((m,p)=>Math.max(m,p.date),0)}
 function cashInHand(){return S.payments.reduce((a,p)=>a+p.amount,0)-S.handovers.reduce((a,h)=>a+h.amount,0)}
@@ -476,11 +478,12 @@ function vCustomer(v){
   const freq={};orders.forEach(o=>o.items.forEach(i=>{const n=itemName(i);freq[n]=(freq[n]||0)+i.qty}));
   const top=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,4);
   const ledger=[...S.payments.filter(p=>p.customerId===c.id).map(p=>({t:p.date,d:-p.amount,s:"تحصيل"+(p.note?` · ${p.note}`:""),k:`pay:${p.id}`})),
-    ].sort((a,b)=>b.t-a.t).slice(0,15);
+    ...(S.adjusts||[]).filter(a=>a.customerId===c.id).map(a=>({t:a.date,d:a.amount,s:(a.amount>=0?"زوّدت عليه":"نزّلت من عليه")+(a.note?` · ${a.note}`:""),k:`adj:${a.id}`}))
+    ].sort((a,b)=>b.t-a.t).slice(0,30);
   const ob=c.opening||0;
   v.innerHTML=`
   <div class="stats">
-    <div class="stat"><div class="lbl">عليه</div><div class="v">${money(Math.max(b,0))}</div></div>
+    <button class="stat" id="cBal" style="text-align:start"><div class="lbl">${b<0?"ليه":"عليه"} ›</div><div class="v">${money(Math.abs(b))}</div></button>
     <div class="stat"><div class="lbl">آخر طلب</div><div class="v" style="font-size:14px">${last?esc(when(last.created)):"—"}</div></div>
     <div class="stat"><div class="lbl">بيطلب كل</div><div class="v" style="font-size:14px">${rh?`${rh.avg} يوم`:"—"}</div></div>
   </div>
@@ -490,17 +493,17 @@ function vCustomer(v){
   ${open.length?`<section class="sec"><h2>طلبات مفتوحة <span class="count num">${open.length}</span></h2>${open.map(orderCard).join("")}</section>`:""}
   ${top.length?`<section class="sec"><h2>بياخد عادةً</h2><div class="list">${top.map(([n,q])=>`<div class="row"><span class="main t">${esc(n)}</span><span class="s">إجمالي ${money(q)}</span></div>`).join("")}</div>
     <button class="btn ghost block" id="cRepeat">كرر آخر طلب</button></section>`:""}
-  <section class="sec"><h2>كشف الحساب</h2><div class="list ledger">
+  <section class="sec"><h2>كشف الحساب <button class="link" id="cAdj">ظبط الحساب</button></h2><div class="list ledger">
     ${ledger.map(l=>`<button class="row" data-mv="${l.k}"><span class="main"><span class="t">${esc(l.s)}</span><br><span class="s">${esc(dayLabel(l.t))}</span></span><span class="amt ${l.d>0?"plus":"minus"}">${l.d>0?"+":"−"}${money(Math.abs(l.d))}</span></button>`).join("")}
     <button class="row" id="cOpen"><span class="main"><span class="t">رصيد أول المدة</span><br><span class="s">${c.openingDate?`لحد ${esc(fmtDay(c.openingDate))} · `:""}دوس علشان تعدله</span></span><span class="amt ${ob<0?"minus":""}">${ob<0?"ليه ":""}${money(Math.abs(ob))}</span></button></div>
-    <p class="hint">الرصيد = رصيد أول المدة − التحصيل. لو العميل اتسحب عليه بضاعة، زوّدها في رصيد أول المدة من كشف الشركة. دوس على أي تحصيل علشان تعدله أو تمسحه.</p></section>
+    <p class="hint">عليه = رصيد أول المدة + اللي زوّدته − التحصيل. لو اتسحب عليه بضاعة أو الرقم مش مطابق للشركة، دوس «ظبط الحساب». دوس على أي حركة علشان تعدلها أو تمسحها.</p></section>
   <section class="sec"><h2>التواصل</h2><div class="card"><div class="t"><b>${esc(c.owner)}</b> · <span class="num">${esc(c.phone||"—")}</span></div>
     <div class="call">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone)}">اتصال</a><a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${waNum(c.phone)}">واتساب</a>`:""}
     <button class="btn ghost sm" id="cEdit">تعديل البيانات</button></div></div></section>
   ${orders.filter(o=>o.status==="delivered").length?`<section class="sec"><h2>طلبات قديمة</h2>${orders.filter(o=>o.status==="delivered").slice(0,5).map(orderCard).join("")}</section>`:""}`;
   bindAlerts(v);bindOrderCards(v);bindReqRows(v);
   $("#cNew").onclick=()=>orderEditor({customerId:c.id});$("#cCol").onclick=()=>collectSheet(c.id);$("#cReq").onclick=()=>quickCapture(c.id);
-  $("#cEdit").onclick=()=>customerSheet(c.id);$("#cOpen").onclick=()=>openingSheet(c.id);bindMoves(v);
+  $("#cEdit").onclick=()=>customerSheet(c.id);$("#cOpen").onclick=()=>openingSheet(c.id);$("#cAdj").onclick=$("#cBal").onclick=()=>adjustSheet(c.id);bindMoves(v);
   const rp=$("#cRepeat");if(rp)rp.onclick=()=>orderEditor({customerId:c.id,items:orders[0].items.map(i=>({...i}))});
 }
 
@@ -529,7 +532,7 @@ function vOrders(v){
   v.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{filt.orders=b.dataset.f;render()});bindOrderCards(v);bindReqRows(v);
 }
 function bindMoves(v){v.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.mv.split(":");
-  if(k==="pay")collectSheet(null,id);else if(k==="hand")handoverSheet(id);else orderSheet(id)})}
+  if(k==="pay")collectSheet(null,id);else if(k==="hand")handoverSheet(id);else if(k==="adj")adjustSheet(null,id);else orderSheet(id)})}
 function reqRow(r){return `<button class="row alert" data-r="${r.id}"><span class="dot info"></span><span class="main"><span class="t">${esc(cust(r.customerId).name)}</span><br><span class="s">${esc(r.text)} · ${esc(when(r.created))}</span></span></button>`}
 function bindReqRows(v){v.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>requestSheet(b.dataset.r))}
 
@@ -893,6 +896,30 @@ function openingFields(c){const o=c.opening||0;return `<div class="f" style="dis
 function bindOpening(sh){sh.querySelector("#obs").onclick=e=>{const b=e.target.closest("[data-ob]");if(!b)return;sh.querySelectorAll("[data-ob]").forEach(x=>x.setAttribute("aria-pressed",x===b))};bindDate("cbd")}
 function readOpening(sh,c){const sign=sh.querySelector('[data-ob="-1"]').getAttribute("aria-pressed")==="true"?-1:1;
   return {opening:sign*(Math.abs(parseFloat($("#cb").value))||0),openingDate:fromIso($("#cbd").value,c.openingDate)}}
+/* the rep controls the account: set what the customer owes now (from the company), or add/take off an amount.
+   Each change is kept as its own dated line, so nothing is lost */
+function adjustSheet(cid,adjId){const a=adjId?S.adjusts.find(x=>x.id===adjId):null;if(a)cid=a.customerId;const c=S.customers.find(x=>x.id===cid);if(!c)return;
+  const cur=Math.round(balance(cid)),fmt=n=>Math.round(n).toLocaleString("en-US");
+  const modes=a?[["add","زوّد عليه"],["sub","نزّل من عليه"]]:[["set","عليه كام"],["add","زوّد عليه"],["sub","نزّل من عليه"]];
+  let mode=a?(a.amount>=0?"add":"sub"):"set";
+  const sh=sheet(a?"تعديل حركة":"ظبط الحساب",`<div class="card"><span class="hint">${esc(c.name)} · ${cur<0?"ليه":"عليه"} دلوقتي</span><div style="font-size:24px;font-weight:800">${money(Math.abs(cur))} ج</div></div>
+    <div class="seg" id="ajm">${modes.map(([k,t])=>`<button type="button" data-ajm="${k}" aria-pressed="${k===mode}">${t}</button>`).join("")}</div>
+    <label class="f"><span id="ajl"></span><input class="inp num" id="aja" type="number" inputmode="decimal" placeholder="0" value="${a?Math.abs(a.amount):""}" style="text-align:right;direction:rtl"></label>
+    <div class="hint" id="ajr"></div>
+    ${dateField("ajd",a?a.date:Date.now())}
+    <label class="f">ملحوظة (اختياري)<input class="inp" id="ajn" value="${esc(a?a.note:"")}" placeholder="بضاعة اتسلمت، حسب كشف الشركة…"></label>`,
+    `<button class="btn primary block" id="ajs">احفظ</button>${a?`<button class="btn ghost block" id="ajdl">امسح الحركة دي</button>`:""}`);
+  const base=a?cur-a.amount:cur; // balance without this line, when editing it
+  const delta=()=>{const v=parseFloat($("#aja").value);if(!(v>=0))return null;return mode==="set"?v-base:mode==="add"?v:-v};
+  const upd=()=>{sh.querySelectorAll("[data-ajm]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.ajm===mode));
+    $("#ajl").textContent=mode==="set"?"عليه كام حسب الشركة؟":mode==="add"?"زوّد عليه كام؟":"نزّل من عليه كام؟";
+    const d=delta();$("#ajr").textContent=d===null?"":`هيبقى ${base+d<0?"ليه":"عليه"} ${fmt(Math.abs(base+d))} ج${mode==="set"&&d?` (${d>0?"زيادة":"نقص"} ${fmt(Math.abs(d))} ج)`:""}`};
+  upd();sh.querySelector("#ajm").onclick=e=>{const b=e.target.closest("[data-ajm]");if(b){mode=b.dataset.ajm;upd()}};$("#aja").oninput=upd;bindDate("ajd");
+  sh.querySelector("#ajs").onclick=()=>{const d=delta();if(d===null)return toast("اكتب المبلغ");if(!a&&!d)return toast("الحساب مظبوط، مفيش تغيير");
+    const note=$("#ajn").value.trim()||(mode==="set"?"ظبط على حساب الشركة":"");const x={customerId:cid,amount:d,date:fromIso($("#ajd").value,a&&a.date),note};
+    if(a)Object.assign(a,x);else (S.adjusts=S.adjusts||[]).push({id:uid(),...x});save();closeSheet();
+    toast(`اتحفظ · ${balance(cid)<0?"ليه":"عليه"} ${fmt(Math.abs(balance(cid)))} ج`);render()};
+  const del=sh.querySelector("#ajdl");if(del)armDel(del,()=>{S.adjusts=S.adjusts.filter(x=>x!==a);save();closeSheet();toast("اتمسحت");render()})}
 function openingSheet(cid){const c=S.customers.find(x=>x.id===cid);if(!c)return;
   const sh=sheet("رصيد أول المدة",`<p class="hint">${esc(c.name)} · اكتب اللي كان عليه أو ليه قبل ما تسجل طلباته وتحصيلاته هنا. تقدر تغيره في أي وقت.</p>${openingFields(c)}`,
     `<button class="btn primary block" id="obsv">احفظ</button>`);
@@ -932,9 +959,9 @@ function settingsSheet(){const s=S.settings;
     <p class="tagline">دفتر المندوب · نسخة تجريبية من MESTK</p>`,`<button class="btn primary block" id="ss">احفظ</button>`);
   sh.querySelector("#ss").onclick=()=>{Object.assign(s,{rep:$("#sr").value.trim(),colleague:$("#sc").value.trim(),phone:$("#sp").value.trim(),remind:+$("#srm").value});save();closeSheet();toast("اتحفظ");render()};
   sh.querySelector("#sx").onclick=()=>backup($("#sxout"));
-  sh.querySelector("#si").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.customers||!d.orders)throw 0;S=d;save();closeSheet();toast("اترجعت النسخة");go("home")}catch(err){toast("الملف ده مش نسخة من التطبيق")}};r.readAsText(f)};
+  sh.querySelector("#si").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.customers||!d.orders)throw 0;S=d;if(!S.adjusts)S.adjusts=[];save();closeSheet();toast("اترجعت النسخة");go("home")}catch(err){toast("الملف ده مش نسخة من التطبيق")}};r.readAsText(f)};
   const arm=(btn,fn)=>{btn.onclick=()=>{if(btn.dataset.armed){fn()}else{btn.dataset.armed=1;btn.textContent="متأكد؟ دوس تاني";}}};
-  const clr=sh.querySelector("#sclr");if(clr)arm(clr,()=>{S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:{...S.settings},products:[],carton:S.carton||{},customers:[],orders:[],requests:[],payments:[],handovers:[]};save();closeSheet();toast("اتمسحت، ضيف أول عميل");go("customers")});
+  const clr=sh.querySelector("#sclr");if(clr)arm(clr,()=>{S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:{...S.settings},products:[],carton:S.carton||{},customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save();closeSheet();toast("اتمسحت، ضيف أول عميل");go("customers")});
   arm(sh.querySelector("#sdemo"),()=>{const keep={...S.settings};S=seed();S.settings=keep;save();closeSheet();toast("رجعت البيانات التجريبية");go("home")});
 }
 
