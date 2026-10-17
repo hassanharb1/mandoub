@@ -201,6 +201,12 @@ textarea.inp{min-height:84px;resize:vertical}
 .bmeta [data-bt]{flex:1;padding:8px 12px;font-size:14px}
 .bfor{font-size:13.5px;font-weight:700;color:var(--accent)}.bfor[hidden]{display:none}
 .bfor input{flex:1;padding:8px 10px}
+.prow{padding:0;gap:0}
+.prow .pmain{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:12px 14px;background:none;border:0;text-align:start;color:inherit}
+.psend{display:flex;flex-direction:column;gap:4px;padding:6px 10px;border-inline-start:1px solid var(--line);flex:none}
+.psend button{min-height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:12.5px;color:var(--fg)}
+.psend [data-pimg]{background:#1FA855;border-color:#1FA855;color:#fff}
+.sendone .btns{margin-top:6px}
 .lnote{margin-top:8px;padding:8px 10px;font-size:14px;font-weight:600}
 .items small{color:var(--muted);font-size:12.5px}
 .per{font-size:13px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -309,7 +315,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=23; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=24; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -608,7 +614,8 @@ const oldTag=p=>p.forDate?`قديمة · عن يوم ${fmtDay(p.forDate)}`:"";
 const payNote=p=>[oldTag(p),p.note].filter(Boolean).join(" · ");
 function dayColSection(){const list=dayPays(filt.dcDay),sum=list.reduce((a,p)=>a+p.amount,0),d=fromIso(filt.dcDay);
   const neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate);
-  const rows=ps=>ps.map(p=>`<button class="row" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${payNote(p)?`<br><span class="s">${esc(payNote(p))}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>`).join("");
+  const rows=ps=>ps.map(p=>`<div class="row prow"><button class="pmain" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${payNote(p)?`<br><span class="s">${esc(payNote(p))}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>
+    <span class="psend"><button data-pimg="${p.id}" aria-label="ابعت صورة للتحصيل ده">صورة</button><button data-ptxt="${p.id}" aria-label="ابعت رسالة للتحصيل ده">رسالة</button></span></div>`).join("");
   const sub=(t,ps)=>`<div class="row s" style="font-size:12.5px;font-weight:800;padding:6px 14px;background:var(--sunk)">${t} · ${money(ps.reduce((a,p)=>a+p.amount,0))} ج</div>`;
   return `<section class="sec" id="dcSec"><h2>تحصيلات يوم <span class="count">${esc(daysSince(d)===0?"النهارده":fmtDay(d))}</span>
     <label class="link" style="position:relative;cursor:pointer;margin-inline-start:auto">غيّر اليوم<input type="date" id="dcDay" value="${filt.dcDay}" max="${isoDay(Date.now())}" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></h2>
@@ -668,7 +675,9 @@ async function dayColImage(iso){const F="Cairo,system-ui,Tahoma,sans-serif";try{
   ctx.textAlign="left";ctx.font=`800 42px ${F}`;ctx.fillText(`${sum.toLocaleString("en-US")} ج`,P+28,y+55);
   ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText("دفتر المندوب",W-P,H-40);ctx.textAlign="left";ctx.fillText("MESTK",P,H-40);
   return new Promise(r=>cv.toBlob(r,"image/jpeg",0.92))}
-function bindDayCol(v){const di=v.querySelector("#dcDay");if(di)di.onchange=()=>{if(di.value){filt.dcDay=di.value;render()}};
+function bindDayCol(v){
+  v.querySelectorAll("[data-ptxt]").forEach(b=>b.onclick=()=>{const p=S.payments.find(x=>x.id===b.dataset.ptxt);if(p)shareText(payMessage(p))});
+  v.querySelectorAll("[data-pimg]").forEach(b=>b.onclick=()=>{const p=S.payments.find(x=>x.id===b.dataset.pimg);if(p)sharePayImage(p)});const di=v.querySelector("#dcDay");if(di)di.onchange=()=>{if(di.value){filt.dcDay=di.value;render()}};
   v.querySelector("#dcAdd")?.addEventListener("click",()=>batchColSheet(filt.dcDay));
   v.querySelector("#dcTxt")?.addEventListener("click",()=>shareText(dayColText(filt.dcDay)));
   const bi=v.querySelector("#dcImg");if(bi){let file=null;const iso=filt.dcDay;bi.disabled=true;
@@ -1025,13 +1034,16 @@ function bindDate(id){const i=$("#"+id);i.oninput=()=>{$("#"+id+"w").textContent
 // "امسح" needs a second tap
 function armDel(btn,fn){btn.onclick=()=>{if(btn.dataset.armed)fn();else{btn.dataset.armed=1;btn.textContent="متأكد؟ دوس تاني";btn.style.color="var(--bad)"}}}
 function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):null;if(p)cid=p.customerId;
-  const sh=sheet(p?"تعديل تحصيل":"تحصيل",`${custSelect("pc",cid)}<div id="pbal" class="hint"></div>
+  const sh=sheet(p?"تعديل تحصيل":"تحصيل",`${p?`<div class="card sendone"><span class="hint">ابعت التحصيل ده للزميل أو الجروب</span><div class="btns"><button class="btn wa" id="p1img">ابعت صورة</button><button class="btn ghost" id="p1txt">ابعت رسالة</button></div></div>`:""}
+    ${custSelect("pc",cid)}<div id="pbal" class="hint"></div>
     <label class="f">المبلغ<input class="inp num" id="pa" type="number" inputmode="decimal" placeholder="0" value="${p?p.amount:""}" style="text-align:right;direction:rtl"></label>
     ${dateField("pd",p?p.date:Date.now())}
     <div class="inrow" style="align-items:center"><button type="button" class="chip" id="pold" aria-pressed="${!!(p&&p.forDate)}" style="flex:none">دفعة قديمة</button>
       <label class="f" id="pforL" ${p&&p.forDate?"":"hidden"} style="flex-direction:row;align-items:center;gap:8px">عن يوم<input class="inp num" id="pfor" type="date" max="${isoDay(Date.now())}" value="${p&&p.forDate?isoDay(p.forDate):""}" style="direction:ltr"></label></div>
     <label class="f">ملاحظة (اختياري)<input class="inp" id="pn" value="${esc(p?p.note:"")}" placeholder="كاش، تحويل…"></label>`,
-    `<button class="btn primary block" id="ps">${p?"احفظ التعديل":"سجّل التحصيل"}</button><button class="btn wa block" id="psh">${p?"احفظ وابعته":"سجّل وابعته للجروب"}</button>${p?`<button class="btn ghost block" id="pdl">امسح التحصيل ده</button>`:""}`);
+    p?`<div class="btns"><button class="btn primary" id="ps">احفظ التعديل</button><button class="btn ghost" id="pdl" style="flex:0 0 auto">امسح</button></div>`
+     :`<div class="btns"><button class="btn primary" id="ps">سجّل التحصيل</button><button class="btn wa" id="psh">سجّل وابعته</button></div>`);
+  if(p){sh.querySelector("#p1txt").onclick=()=>shareText(payMessage(p));sh.querySelector("#p1img").onclick=()=>sharePayImage(p)}
   const upd=()=>{const c=$("#pc").value;const b=c?Math.round(balance(c)):0;$("#pbal").textContent=!c?"":b>0?`عليه دلوقتي ${b.toLocaleString("en-US")} ج`:b<0?`ليه عندك ${(-b).toLocaleString("en-US")} ج`:"حسابه خالص"};upd();$("#pc").onchange=upd;bindDate("pd");
   sh.querySelector("#pold").onclick=e=>{const on=e.currentTarget.getAttribute("aria-pressed")!=="true";e.currentTarget.setAttribute("aria-pressed",on);$("#pforL").hidden=!on;
     if(on&&!$("#pfor").value)$("#pfor").value=isoDay(fromIso($("#pd").value)-7*DAY)};
@@ -1042,12 +1054,33 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
     if(isOld)x.forDate=fromIso($("#pfor").value,x.forDate);else delete x.forDate;save();closeSheet();
     toast(p?"اتعدل":`اتسجل ${a.toLocaleString("en-US")} ج · بقى معاك ${Math.round(cashInHand()).toLocaleString("en-US")} ج`);render();
     if(share)shareText(payMessage(x))};
-  sh.querySelector("#ps").onclick=()=>keep(false);sh.querySelector("#psh").onclick=()=>keep(true);
+  sh.querySelector("#ps").onclick=()=>keep(false);sh.querySelector("#psh")?.addEventListener("click",()=>keep(true));
   const del=sh.querySelector("#pdl");if(del)armDel(del,()=>{S.payments=S.payments.filter(x=>x!==p);save();closeSheet();toast("اتمسح");render()});
 }
+/* one collection as a small receipt picture */
+async function payImage(p){const F="Cairo,system-ui,Tahoma,sans-serif";try{await document.fonts.load(`800 40px Cairo`)}catch(e){}
+  const c=cust(p.customerId),b=balance(p.customerId),d=new Date(p.date),W=1080,P=48;
+  const lines=[p.forDate?`دفعة قديمة · عن يوم ${fmtDay(p.forDate)}`:null,p.note?`ملحوظة: ${p.note}`:null].filter(Boolean);
+  const H=520+lines.length*52+(b>0?70:0);const cv=document.createElement("canvas"),ctx=cv.getContext("2d");cv.width=W;cv.height=H;
+  ctx.direction="rtl";ctx.textBaseline="middle";const R=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
+  ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);R(0,0,W,170,0,"#282825");
+  ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;ctx.fillText("إيصال تحصيل",W-P,64);
+  ctx.font=`600 28px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText(`${WD[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}${S.settings.rep?` · ${S.settings.rep}`:""}`,W-P,122);
+  let y=210;ctx.fillStyle="#282825";ctx.font=`800 40px ${F}`;ctx.fillText(c.name+(c.owner?` (${c.owner})`:""),W-P,y);y+=50;
+  if(c.area){ctx.font=`600 26px ${F}`;ctx.fillStyle="#6F6A60";ctx.fillText(c.area,W-P,y)}y+=40;
+  R(P,y,W-2*P,120,22,"#2F7D4F");ctx.fillStyle="#FFFFFF";ctx.font=`800 34px ${F}`;ctx.fillText("المبلغ",W-P-28,y+60);
+  ctx.textAlign="left";ctx.font=`800 52px ${F}`;ctx.fillText(`${p.amount.toLocaleString("en-US")} ج`,P+28,y+60);y+=150;
+  ctx.textAlign="right";lines.forEach(l=>{ctx.font=`700 28px ${F}`;ctx.fillStyle=l.startsWith("دفعة قديمة")?"#BD572F":"#282825";ctx.fillText(l,W-P,y);y+=52});
+  // only "still owes" is worth telling the colleague; a credit usually just means the opening balance wasn't typed yet
+  if(b>0){ctx.font=`700 28px ${F}`;ctx.fillStyle="#6F6A60";ctx.fillText(`الباقي عليه: ${Math.round(b).toLocaleString("en-US")} ج`,W-P,y+10)}
+  ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText("دفتر المندوب",W-P,H-36);ctx.textAlign="left";ctx.fillText("MESTK",P,H-36);
+  return new Promise(r=>cv.toBlob(r,"image/jpeg",0.92))}
+async function sharePayImage(p){const blob=await payImage(p);const file=new File([blob],`تحصيل-${cust(p.customerId).name}.jpg`,{type:"image/jpeg"});const data={files:[file]};
+  if(navigator.canShare&&navigator.canShare(data)){try{await navigator.share(data)}catch(e){}}
+  else{const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();toast("الصورة نزلت، ابعتها من واتساب")}}
 function payMessage(p){const c=cust(p.customerId);const b=balance(p.customerId);
   return ["تحصيل",`العميل: ${c.name}${c.owner?` (${c.owner})`:""}`,`المبلغ: ${p.amount.toLocaleString("en-US")} ج`,`اليوم: ${fmtDay(p.date)}`,
-    p.forDate?`دفعة قديمة عن يوم ${fmtDay(p.forDate)}`:null,p.note?`ملاحظة: ${p.note}`:null,`الباقي عليه: ${Math.round(Math.max(0,b)).toLocaleString("en-US")} ج`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(Boolean).join("\n")}
+    p.forDate?`دفعة قديمة عن يوم ${fmtDay(p.forDate)}`:null,p.note?`ملاحظة: ${p.note}`:null,b>0?`الباقي عليه: ${Math.round(b).toLocaleString("en-US")} ج`:null,S.settings.rep?`من: ${S.settings.rep}`:null].filter(Boolean).join("\n")}
 // share menu (pick a WhatsApp group or a person); WhatsApp's own picker where sharing isn't available
 function shareText(txt){if(navigator.share)navigator.share({text:txt}).catch(()=>{});else window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank","noopener")}
 /* collections counter on Home: counts from the day the rep last zeroed it (today if he never did) */
