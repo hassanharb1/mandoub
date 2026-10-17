@@ -194,6 +194,7 @@ textarea.inp{min-height:84px;resize:vertical}
 .money .lbl{flex:none;font-size:13.5px;font-weight:700;color:var(--muted)}
 .money .net{font-size:18px;color:var(--accent)}
 .money #odisc,.money #odiscA{padding:8px}
+.upbar{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:85;background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:10px 16px;font-weight:800;font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,.2);max-width:92%}
 .lnote{margin-top:8px;padding:8px 10px;font-size:14px;font-weight:600}
 .items small{color:var(--muted);font-size:12.5px}
 .per{font-size:13px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -302,6 +303,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
+const VERSION=20; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1097,12 +1099,21 @@ function settingsSheet(){const s=S.settings;
     <div class="btns"><button class="btn ghost" id="sx">نسخة احتياطية</button><label class="btn ghost" style="cursor:pointer">استرجاع نسخة<input type="file" id="si" accept="application/json" hidden></label></div>
     <div id="sxout"></div>
     ${S.demo?`<button class="btn dark block" id="sclr">امسح البيانات التجريبية وابدأ بعملائي</button>`:""}<button class="btn ghost block" id="sdemo">رجّع البيانات التجريبية</button></section>
+    <section class="sec"><h2>تحديث البرنامج</h2>
+    <div class="card"><div class="total"><span>النسخة اللي عندك</span><span class="num">v${VERSION}</span></div><div class="hint" id="upHint">دوس علشان تشوف فيه نسخة أحدث ولا لأ. بياناتك مش بتتأثر بالتحديث.</div>
+    <button class="btn dark block" id="upBtn">دوّر على تحديث</button></div></section>
     <p class="tagline">دفتر المندوب · نسخة تجريبية من MESTK</p>`,`<button class="btn primary block" id="ss">احفظ</button>`);
   sh.querySelector("#ss").onclick=()=>{Object.assign(s,{rep:$("#sr").value.trim(),colleague:$("#sc").value.trim(),phone:$("#sp").value.trim(),remind:+$("#srm").value});save();closeSheet();toast("اتحفظ");render()};
   sh.querySelectorAll("[data-nt]").forEach(c=>c.onchange=()=>{s.notif={...(s.notif||{}),[c.dataset.nt]:c.checked};save()});
   sh.querySelector("#nOn").onclick=async()=>{const r=await enableNotif();$("#nHint").textContent=r;sh.querySelector("#nOn").textContent=notifState()};
   sh.querySelector("#nTest").onclick=async()=>{const r=await testNotif();if(r)$("#nHint").textContent=r};
   sh.querySelector("#sx").onclick=()=>backup($("#sxout"));
+  const ub=sh.querySelector("#upBtn");ub.onclick=async()=>{
+    if(ub.dataset.ready){applyUpdate();return}
+    ub.disabled=true;ub.textContent="بدوّر…";const v=await latestVersion();ub.disabled=false;
+    if(v===null){$("#upHint").textContent="مقدرتش أوصل للنت. جرّب تاني وإنت على الداتا أو واي فاي شغال.";ub.textContent="دوّر تاني";return}
+    if(v>VERSION){$("#upHint").textContent=`فيه نسخة جديدة v${v} ✓`;ub.textContent="حدّث دلوقتي";ub.dataset.ready=1;ub.className="btn primary block"}
+    else{$("#upHint").textContent="عندك آخر نسخة ✓";ub.textContent="دوّر تاني"}};
   sh.querySelector("#si").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.customers||!d.orders)throw 0;S=d;if(!S.adjusts)S.adjusts=[];save();closeSheet();toast("اترجعت النسخة");go("home")}catch(err){toast("الملف ده مش نسخة من التطبيق")}};r.readAsText(f)};
   const arm=(btn,fn)=>{btn.onclick=()=>{if(btn.dataset.armed){fn()}else{btn.dataset.armed=1;btn.textContent="متأكد؟ دوس تاني";}}};
   const clr=sh.querySelector("#sclr");if(clr)arm(clr,()=>{S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:{...S.settings},products:[],carton:S.carton||{},customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save();closeSheet();toast("اتمسحت، ضيف أول عميل");go("customers")});
@@ -1136,6 +1147,17 @@ async function enableNotif(){if(!canNotify())return"الموبايل ده أو �
 async function testNotif(){if(!canNotify()||Notification.permission!=="granted")return"شغّل الإشعارات الأول.";
   const reg=await navigator.serviceWorker.ready;const n=alerts().length;
   reg.showNotification("دفتر المندوب",{body:n?`عندك ${n} حاجات في «محتاج تفتكر»`:"كله تمام، مفيش حاجة متأخرة",icon:"icon-192.png",badge:"icon-192.png",tag:"mandoub-test",dir:"rtl",lang:"ar"});return""}
+
+/* ---------- updates ----------
+   The newest version number is read from sw.js on the server (CACHE "mandoub-vN"). Updating clears the app's
+   cached files (never the data, which lives in localStorage) and reloads, so the new files come down. */
+async function latestVersion(){try{const r=await fetch("sw.js?check="+Date.now(),{cache:"no-store"});const m=(await r.text()).match(/mandoub-v(\d+)/);return m?+m[1]:null}catch(e){return null}}
+async function applyUpdate(){toast("بحدّث…");try{const reg=await navigator.serviceWorker?.getRegistration();if(reg)await reg.update().catch(()=>{});
+  const ks=await caches.keys();await Promise.all(ks.filter(k=>k!=="mandoub-notify").map(k=>caches.delete(k)))}catch(e){}
+  location.reload()}
+// on open: if a newer version is on the server, offer it in a small bar
+setTimeout(async()=>{const v=await latestVersion();if(!v||v<=VERSION||$("#upBar"))return;
+  const b=document.createElement("button");b.id="upBar";b.className="upbar";b.textContent=`فيه نسخة جديدة من البرنامج · دوس علشان تحدّث`;b.onclick=applyUpdate;document.body.appendChild(b)},3000);
 
 /* ---------- boot ---------- */
 render();loadPhotos();setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);

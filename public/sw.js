@@ -1,4 +1,4 @@
-const CACHE="mandoub-v19";
+const CACHE="mandoub-v20";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL)}).then(()=>self.skipWaiting()))});
@@ -7,6 +7,7 @@ const put=(req,res)=>{if(res&&res.ok){const cp=res.clone();caches.open(CACHE).th
 self.addEventListener("fetch",e=>{
   if(e.request.method!=="GET")return;
   const url=new URL(e.request.url);
+  if(url.searchParams.has("check"))return; // the app's "is there a newer version?" check goes straight to the network
   if(url.origin===location.origin&&url.pathname.endsWith("/"+PHOTOS)){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>put(e.request,res))));
   } else if(url.origin===location.origin){
