@@ -542,7 +542,7 @@ function vCustomer(v){
     ${ledger.map(l=>`<button class="row" data-mv="${l.k}"><span class="main"><span class="t">${esc(l.s)}</span><br><span class="s">${esc(dayLabel(l.t))}</span></span><span class="amt ${l.d>0?"plus":"minus"}">${l.d>0?"+":"−"}${money(Math.abs(l.d))}</span></button>`).join("")}
     <button class="row" id="cOpen"><span class="main"><span class="t">رصيد أول المدة</span><br><span class="s">${c.openingDate?`لحد ${esc(fmtDay(c.openingDate))} · `:""}دوس علشان تعدله</span></span><span class="amt ${ob<0?"minus":""}">${ob<0?"ليه ":""}${money(Math.abs(ob))}</span></button></div>
     <p class="hint">عليه = رصيد أول المدة + اللي زوّدته − التحصيل. لو اتسحب عليه بضاعة أو الرقم مش مطابق للشركة، دوس «ظبط الحساب». دوس على أي حركة علشان تعدلها أو تمسحها.</p></section>
-  <section class="sec"><h2>التواصل</h2><div class="card"><div class="t"><b>${esc(c.owner)}</b> · <span class="num">${esc(c.phone||"—")}</span></div>
+  <section class="sec"><h2>التواصل</h2><div class="card"><div class="t">${c.owner||c.phone?`${c.owner?`<b>${esc(c.owner)}</b>`:""}${c.owner&&c.phone?" · ":""}${c.phone?`<span class="num">${esc(c.phone)}</span>`:""}`:`<span class="hint">لسه مفيش اسم مسؤول ولا تليفون</span>`}</div>
     <div class="call">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone)}">اتصال</a><a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${waNum(c.phone)}">واتساب</a>`:""}
     <button class="btn ghost sm" id="cEdit">تعديل البيانات</button></div></div></section>
   ${orders.filter(o=>o.status==="delivered").length?`<section class="sec"><h2>طلبات قديمة</h2>${orders.filter(o=>o.status==="delivered").slice(0,5).map(orderCard).join("")}</section>`:""}`;
@@ -982,8 +982,15 @@ function customerSheet(id){const c=id?S.customers.find(x=>x.id===id):{name:"",ow
     <label class="f">اسم المسؤول<input class="inp" id="co" value="${esc(c.owner)}"></label>
     <div class="inrow"><label class="f">المنطقة<input class="inp" id="ca" value="${esc(c.area)}"></label><label class="f">التليفون<input class="inp num" id="cp2" type="tel" value="${esc(c.phone)}" style="text-align:right;direction:ltr"></label></div>
     ${openingFields(c)}`,
-    `<button class="btn primary block" id="cs">احفظ</button>`);
+    `<button class="btn primary block" id="cs">احفظ</button>${id?`<button class="btn ghost block" id="cdl">امسح العميل ده</button>`:""}`);
   bindOpening(sh);
+  // deleting a customer takes his orders, requests, collections and account lines with him, so say how many first
+  const dl=sh.querySelector("#cdl");if(dl){const mine=k=>(S[k]||[]).filter(x=>x.customerId===id).length;
+    const n={o:mine("orders"),r:mine("requests"),p:mine("payments"),a:mine("adjusts")};const any=n.o+n.r+n.p+n.a;
+    dl.onclick=()=>{if(!dl.dataset.armed){dl.dataset.armed=1;dl.style.color="var(--bad)";
+        dl.textContent=any?`هيتمسح معاه ${[n.o&&`${n.o} طلب`,n.p&&`${n.p} تحصيل`,n.r&&`${n.r} مستني`,n.a&&`${n.a} حركة حساب`].filter(Boolean).join(" و ")} · دوس تاني للتأكيد`:"متأكد؟ دوس تاني";return}
+      S.customers=S.customers.filter(x=>x.id!==id);["orders","requests","payments","adjusts"].forEach(k=>{if(S[k])S[k]=S[k].filter(x=>x.customerId!==id)});
+      save();closeSheet();toast(`اتمسح ${c.name}`);go("customers")}}
   sh.querySelector("#cs").onclick=()=>{const n=$("#cn").value.trim();if(!n)return toast("اكتب اسم العميل");
     const d={name:n,owner:$("#co").value.trim(),area:$("#ca").value.trim(),phone:$("#cp2").value.trim(),...readOpening(sh,c)};
     if(id)Object.assign(c,d);else{d.id=uid();S.customers.push(d)}save();closeSheet();toast("اتحفظ");if(!id)go("customer",d.id);else render()}}
