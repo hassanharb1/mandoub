@@ -222,6 +222,8 @@ textarea.inp{min-height:84px;resize:vertical}
 .call{display:flex;gap:8px;flex-wrap:wrap}
 /* order editor panes: one column on the phone */
 .oe-side,.oe-main{display:contents}
+/* the wrappers have no box on the phone, so .sb>* doesn't reach their children: stop them shrinking too */
+.oe-side>*,.oe-main>*{flex-shrink:0}
 .oe-main>*{order:1}.oe-late{order:2}
 .oe-picked,.navbrand{display:none}
 /* ---------- wide screens (laptop / desktop): side nav, wider content, two columns ---------- */
