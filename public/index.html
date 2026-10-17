@@ -184,6 +184,13 @@ textarea.inp{min-height:84px;resize:vertical}
 .useg{display:flex;background:var(--sunk);border-radius:11px;padding:2px;gap:2px}
 .useg button{min-width:40px;height:36px;border:0;background:none;border-radius:9px;font-weight:800;font-size:16px;color:var(--muted)}
 .useg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.cpick{display:flex;flex-direction:column;gap:5px;font-size:13.5px;font-weight:700;color:var(--muted)}
+.cpbtn{text-align:start;display:block;cursor:pointer;color:var(--fg)}
+.cpbtn.empty{color:var(--muted)}
+.cppanel{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.cppanel .list{max-height:300px;overflow-y:auto}
+.chip.usual{border-color:var(--accent);color:var(--accent)}
+.chip.usual[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .lnote{margin-top:8px;padding:8px 10px;font-size:14px;font-weight:600}
 .items small{color:var(--muted);font-size:12.5px}
 .per{font-size:13px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -545,7 +552,28 @@ function vMoney(v){
 }
 
 /* ---------- customer picker ---------- */
-function custSelect(id,sel){return `<label class="f">العميل<select class="inp" id="${id}">${sel?"":`<option value="">اختار العميل…</option>`}${S.customers.slice().sort((a,b)=>a.name.localeCompare(b.name,"ar")).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}${c.area?` — ${esc(c.area)}`:""}</option>`).join("")}</select></label>`}
+// search-as-you-type picker; recent customers first. The chosen id sits in a hidden input with the given id,
+// which fires "change" like the old <select> did
+const custLabel=c=>`${c.name}${c.area?` — ${c.area}`:""}`;
+function lastTouch(cid){let t=0;S.orders.forEach(o=>{if(o.customerId===cid&&o.created>t)t=o.created});
+  S.payments.forEach(p=>{if(p.customerId===cid&&p.date>t)t=p.date});S.requests.forEach(r=>{if(r.customerId===cid&&r.created>t)t=r.created});return t}
+function custSelect(id,sel){const c=sel&&S.customers.find(x=>x.id===sel);
+  return `<div class="f cpick">العميل<input type="hidden" id="${id}" value="${c?c.id:""}">
+    <button type="button" class="inp cpbtn ${c?"":"empty"}" data-cp="${id}">${c?esc(custLabel(c)):"اختار العميل…"}</button>
+    <div class="cppanel" id="${id}-p" hidden><input class="inp" data-cpq="${id}" placeholder="اكتب اسم العميل أو المنطقة" autocomplete="off" enterkeyhint="search"><div class="list" id="${id}-l"></div></div></div>`}
+function cpDraw(id){const q=(document.querySelector(`[data-cpq="${id}"]`).value||"").trim();
+  const list=q?S.customers.filter(c=>(c.name+" "+(c.owner||"")+" "+(c.area||"")).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,"ar"))
+    :S.customers.slice().sort((a,b)=>lastTouch(b.id)-lastTouch(a.id)||a.name.localeCompare(b.name,"ar"));
+  $(`#${id}-l`).innerHTML=(q?"":`<div class="row s" style="font-size:12.5px;padding:6px 14px">آخر العملاء</div>`)+
+    (list.slice(0,q?40:8).map(c=>`<button type="button" class="row" data-cpv="${id}|${c.id}"><span class="avatar" style="width:34px;height:34px;font-size:14px">${esc(initials(c.name))}</span><span class="main"><span class="t">${esc(c.name)}</span>${c.area||c.owner?`<br><span class="s">${esc([c.owner,c.area].filter(Boolean).join(" · "))}</span>`:""}</span></button>`).join("")
+    ||`<div class="empty" style="border:0">مفيش عميل بالاسم ده</div>`)}
+function setCust(id,cid){const c=S.customers.find(x=>x.id===cid);const h=$("#"+id);if(!h)return;h.value=c?c.id:"";
+  const b=document.querySelector(`[data-cp="${id}"]`);b.textContent=c?custLabel(c):"اختار العميل…";b.classList.toggle("empty",!c);
+  $(`#${id}-p`).hidden=true;h.dispatchEvent(new Event("change"))}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-cp]");
+  if(b){const id=b.dataset.cp,p=$(`#${id}-p`);p.hidden=!p.hidden;if(!p.hidden){const i=p.querySelector("input");i.value="";cpDraw(id);i.focus()}return}
+  const v=e.target.closest("[data-cpv]");if(v){const [id,cid]=v.dataset.cpv.split("|");setCust(id,cid)}});
+document.addEventListener("input",e=>{const i=e.target.closest("[data-cpq]");if(i)cpDraw(i.dataset.cpq)});
 
 /* ---------- quick capture ---------- */
 function quickCapture(cid){
@@ -624,6 +652,8 @@ function orderEditor(init){
     ${custSelect("oc",editing?editing.customerId:init.customerId)}
     <button type="button" class="link" id="ocNew" style="align-self:flex-start;margin-top:-6px">+ عميل جديد</button>
     <div class="inrow" id="ocBox" hidden><input class="inp" id="ocName" placeholder="اسم المحل"><input class="inp" id="ocArea" placeholder="المنطقة"><button type="button" class="btn dark" id="ocAdd" style="flex:none">ضيف</button></div>
+    <div class="inrow" style="align-items:flex-end"><label class="f" style="flex:0 0 110px">خصم العميل %<input class="inp num" id="odisc" type="number" inputmode="decimal" placeholder="مفيش" value="${esc(editing?(editing.disc||""):"")}" style="text-align:center"></label>
+      <div class="f" style="display:flex;flex-direction:column;gap:5px;font-size:13.5px;font-weight:700;color:var(--muted)">الدفع<div class="seg" id="opay">${[["cash","كاش"],["credit","آجل"],["","بعدين"]].map(([k,t])=>`<button type="button" data-pay="${k}" aria-pressed="${(editing?editing.pay||"":"")===k}">${t}</button>`).join("")}</div></div></div>
     ${coSeg("pco",`<button data-picked aria-pressed="false">اخترت <span class="num" id="pcount">0</span></button>`)}
     ${searchBox("pq","دوّر باسم المنتج أو الكود")}
     <div class="chips" id="pcats"></div>
@@ -631,12 +661,15 @@ function orderEditor(init){
     <details><summary class="link" style="cursor:pointer">+ منتج مش في القائمة</summary>
       <div class="inrow" style="margin-top:8px"><input class="inp" id="exn" placeholder="اسم المنتج"><input class="inp" id="exq" type="number" inputmode="numeric" placeholder="الكمية" style="max-width:90px"><button class="btn dark" id="exa" style="flex:none">ضيف</button></div>
       <div id="exl"></div></details>
-    <div class="inrow" style="align-items:flex-end"><label class="f" style="flex:0 0 110px">خصم العميل %<input class="inp num" id="odisc" type="number" inputmode="decimal" placeholder="مفيش" value="${esc(editing?(editing.disc||""):"")}" style="text-align:center"></label>
-      <div class="f" style="display:flex;flex-direction:column;gap:5px;font-size:13.5px;font-weight:700;color:var(--muted)">الدفع<div class="seg" id="opay">${[["cash","كاش"],["credit","آجل"],["","بعدين"]].map(([k,t])=>`<button type="button" data-pay="${k}" aria-pressed="${(editing?editing.pay||"":"")===k}">${t}</button>`).join("")}</div></div></div>
     <label class="f">ملاحظة<div class="inrow"><textarea class="inp" id="on" placeholder="ميعاد التسليم، أي حاجة تانية…">${esc(editing?editing.note:init.note||"")}</textarea>${micHTML("on")}</div></label>`,
     `<div class="total"><span id="ocount">0 أصناف</span></div>
      <div class="btns"><button class="btn ghost" id="oSave">${editing?"احفظ":"احفظ ولسه هبعته"}</button><button class="btn wa" id="oSend">${editing&&editing.status!=="draft"?"احفظ وابعت التعديل":"ابعته للزميل"}</button></div>`,{full:true});
   const lines=()=>Object.entries(sel).filter(([,x])=>x.n>0);
+  // what this customer usually takes (how many of his orders had it), shown first
+  const USUAL="بياخد عادةً";
+  const usual=()=>{const cid=$("#oc").value;if(!cid)return[];const n={};
+    S.orders.forEach(o=>{if(o.customerId===cid&&o!==editing)new Set(o.items.map(i=>i.pid).filter(Boolean)).forEach(pid=>n[pid]=(n[pid]||0)+1)});
+    return Object.keys(n).sort((a,b)=>n[b]-n[a]).map(prod).filter(p=>p&&PMAP[p.id]).slice(0,12)};
   const row=p=>{const x=sel[p.id],n=x?x.n:0;
     return `<div class="prod ${n?"sel":""}" data-row="${p.id}"><button class="thumb" data-zoom="${p.id}" aria-label="كبّر الصورة">${imgHTML(p)}</button>
       <div class="main"><div class="t">${esc(p.name)}${p.code?`<span class="code">${esc(p.code)}</span>`:""}</div><div class="s">${q||picked?esc(coName(p.co))+" · ":""}${priceTxt(p)}</div>
@@ -648,17 +681,21 @@ function orderEditor(init){
   // no money total here: carton prices aren't known, so a sum would be wrong
   const sums=()=>{const ls=lines();const n=ls.length+extras.length;$("#pcount").textContent=ls.length;$("#ocount").textContent=n===1?"صنف واحد":`${n} أصناف`};
   const drawList=()=>{
-    sh.querySelectorAll("#pco [data-co]").forEach(b=>b.setAttribute("aria-pressed",!picked&&!q&&b.dataset.co===co));
+    sh.querySelectorAll("#pco [data-co]").forEach(b=>b.setAttribute("aria-pressed",!picked&&!q&&cat!==USUAL&&b.dataset.co===co));
     sh.querySelector("[data-picked]").setAttribute("aria-pressed",picked);
     $("#pcats").hidden=picked||!!q;
-    $("#pcats").innerHTML=catsOf(co).map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${c===cat}">${esc(c)}</button>`).join("");
-    const list=picked?lines().map(([id])=>prod(id)).filter(Boolean):findProducts(co,cat,q);
+    const us=usual();if(cat===USUAL&&!us.length)cat="الكل";
+    $("#pcats").innerHTML=[...(us.length?[USUAL]:[]),...catsOf(co)].map(c=>`<button class="chip ${c===USUAL?"usual":""}" data-cat="${esc(c)}" aria-pressed="${c===cat}">${c===USUAL?"★ ":""}${esc(c)}</button>`).join("");
+    const list=picked?lines().map(([id])=>prod(id)).filter(Boolean):cat===USUAL&&!q?us:findProducts(co,cat,q);
     $("#plist").innerHTML=list.map(row).join("")||`<div class="empty">${picked?"لسه ما اخترتش حاجة":"مفيش منتج بالاسم ده"}</div>`;
     $("#exl").innerHTML=extras.map((e,i)=>`<div class="row"><span class="main t">${esc(e.name)}</span><span class="num">× ${e.qty}</span><button class="link" data-xr="${i}">شيل</button></div>`).join("");
     sums()};
   // redraw only the touched row so the list doesn't jump while tapping
   const redraw=id=>{const el=sh.querySelector(`[data-row="${id}"]`),p=prod(id);if(el&&p)el.outerHTML=row(p);sums()};
+  if(usual().length)cat=USUAL;
   drawList();
+  // picking a customer jumps to what he usually takes
+  $("#oc").addEventListener("change",()=>{if(!picked&&!q&&(cat==="الكل"||cat===USUAL)){cat=usual().length?USUAL:"الكل"}drawList()});
   sh.addEventListener("click",e=>{const t=e.target;const p=t.closest("[data-p]"),m=t.closest("[data-m]"),u=t.closest("[data-u]"),c=t.closest("[data-cat]"),
       k=t.closest("#pco [data-co]"),pk=t.closest("[data-picked]"),z=t.closest("[data-zoom]"),x=t.closest("[data-xr]");
     if(p){const id=p.dataset.p;sel[id]=sel[id]||{n:0,u:"ق",color:"",note:""};sel[id].n++;redraw(id)}
@@ -680,7 +717,7 @@ function orderEditor(init){
   $("#ocNew").onclick=()=>{$("#ocBox").hidden=!$("#ocBox").hidden;if(!$("#ocBox").hidden)$("#ocName").focus()};
   $("#ocAdd").onclick=()=>{const n=$("#ocName").value.trim();if(!n)return toast("اكتب اسم العميل");
     const c={id:uid(),name:n,owner:"",area:$("#ocArea").value.trim(),phone:"",opening:0};S.customers.push(c);save();
-    const sl=$("#oc");sl.insertAdjacentHTML("beforeend",`<option value="${c.id}">${esc(c.name)}${c.area?` — ${esc(c.area)}`:""}</option>`);sl.value=c.id;
+    setCust("oc",c.id);
     $("#ocBox").hidden=true;$("#ocName").value="";$("#ocArea").value="";toast(`اتضاف ${n}`)};
   $("#exa").onclick=()=>{const n=$("#exn").value.trim(),k=parseInt($("#exq").value)||1;if(!n)return toast("اكتب اسم المنتج");extras.push({name:n,qty:k,unit:"ق",price:0});$("#exn").value="";$("#exq").value="";drawList()};
   const commit=()=>{const cid=$("#oc").value;if(!cid){toast("اختار العميل الأول");return null}
@@ -812,7 +849,7 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
     ${dateField("pd",p?p.date:Date.now())}
     <label class="f">ملاحظة (اختياري)<input class="inp" id="pn" value="${esc(p?p.note:"")}" placeholder="كاش، تحويل، جزء من الحساب…"></label>`,
     `<button class="btn primary block" id="ps">${p?"احفظ التعديل":"سجّل التحصيل"}</button><button class="btn wa block" id="psh">${p?"احفظ وابعته":"سجّل وابعته للجروب"}</button>${p?`<button class="btn ghost block" id="pdl">امسح التحصيل ده</button>`:""}`);
-  const upd=()=>{const c=$("#pc").value;$("#pbal").textContent=c?`عليه دلوقتي ${Math.round(balance(c)).toLocaleString("en-US")} ج`:""};upd();$("#pc").onchange=upd;bindDate("pd");
+  const upd=()=>{const c=$("#pc").value;const b=c?Math.round(balance(c)):0;$("#pbal").textContent=!c?"":b>0?`عليه دلوقتي ${b.toLocaleString("en-US")} ج`:b<0?`ليه عندك ${(-b).toLocaleString("en-US")} ج`:"حسابه خالص"};upd();$("#pc").onchange=upd;bindDate("pd");
   const keep=share=>{const c=$("#pc").value,a=parseFloat($("#pa").value);if(!c)return toast("اختار العميل");if(!(a>0))return toast("اكتب المبلغ");
     const d={customerId:c,amount:a,date:fromIso($("#pd").value,p&&p.date),note:$("#pn").value.trim()};
     let x=p;if(x)Object.assign(x,d);else{x={id:uid(),...d};S.payments.push(x)}save();closeSheet();

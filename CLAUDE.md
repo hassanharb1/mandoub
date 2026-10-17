@@ -15,7 +15,8 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 ## What the app does (v1, in production)
 - **النهارده (Home):** cash in hand, money still owed by customers, collected today, orders today, plus a «محتاج تفتكر» list. That list shows unsent draft orders, sent orders nobody confirmed, customers waiting for something, customers who broke their usual ordering rhythm, and overdue balances.
 - **العملاء (Customers):** list sorted by balance. A visit screen shows the balance, open orders, pending requests, what the customer usually buys, a "repeat last order" button and a ledger.
-- **طلب جديد (New order):** pick a customer, then products by company tab (إيفورا / وايت لايت / «اخترت»), search (name or code, across both companies) and category chips. Each product row has its photo (tap to enlarge), price per piece, +/− with a **ق (قطعة) / ك (كرتونة)** toggle next to the count, colour quick-picks taken from the product name (ابيض/اسود/ورم/دهبي…, `item.color`) and a free note per line (`item.note`). **No money total on the order screen** (carton prices are unknown, so a sum would be wrong). «+ عميل جديد» under the customer picker adds a customer (name, area) without leaving the order. A free-text item is still possible. Each order also has **خصم العميل %** (empty by default, typed per order; `o.disc`, shown as a %) and **الدفع** كاش / آجل / بعدين (`o.pay`: `cash` / `credit` / `""`; changeable from the order sheet; a sent order still on «بعدين» shows in «محتاج تفتكر»). Both appear in the message and, in the picture, as a highlighted strip under the header. Colour quick-picks only show when the name offers a choice (2+ colours). Save as a draft, or send.
+- **Customer picker** (order, collection, quick capture): a search-as-you-type panel, empty query lists the 8 most recently touched customers (orders/payments/requests); the chosen id sits in a hidden input that fires `change`.
+- **طلب جديد (New order):** pick a customer (خصم العميل % and الدفع sit right under it), then a «★ بياخد عادةً» chip with that customer's usual products (opened by default when he has history), then products by company tab (إيفورا / وايت لايت / «اخترت»), search (name or code, across both companies) and category chips. Each product row has its photo (tap to enlarge), price per piece, +/− with a **ق (قطعة) / ك (كرتونة)** toggle next to the count, colour quick-picks taken from the product name (ابيض/اسود/ورم/دهبي…, `item.color`) and a free note per line (`item.note`). **No money total on the order screen** (carton prices are unknown, so a sum would be wrong). «+ عميل جديد» under the customer picker adds a customer (name, area) without leaving the order. A free-text item is still possible. Each order also has **خصم العميل %** (empty by default, typed per order; `o.disc`, shown as a %) and **الدفع** كاش / آجل / بعدين (`o.pay`: `cash` / `credit` / `""`; changeable from the order sheet; a sent order still on «بعدين» shows in «محتاج تفتكر»). Both appear in the message and, in the picture, as a highlighted strip under the header. Colour quick-picks only show when the name offers a choice (2+ colours). Save as a draft, or send.
 - **Sending:** the send sheet draws the order as a **picture with the product photos** (canvas → JPEG) and the rep picks **«ابعت الصورة»** (picture only) **or «ابعت الرسالة»** (text only) — not both; each opens the share menu so it can go to the colleague or a WhatsApp group (text falls back to `wa.me`). Order status steps: draft → sent → registered → shipped → delivered.
 - **المنتجات (Catalog tab):** browse both price lists as a photo grid, search, tap a product to enlarge it or start an order with it.
 - **سجّل بسرعة (Quick capture):** customer plus free text (or voice), saved as a pending request until it is converted to an order or closed.
@@ -40,7 +41,7 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **Live URL:** https://mandoub-mestk.hassan-mestkawy.workers.dev, served as a Cloudflare Worker with static assets. Hassan's Cloudflare account also hosts easy-drive-system and mestk-platform.
 - **Netlify is not an option:** `*.netlify.app` is blocked in Egypt (ERR_CONNECTION_TIMED_OUT without a VPN).
 - Deploy from this folder with `npx wrangler deploy` (it reads `wrangler.jsonc`, the worker name `mandoub-mestk` and the `./public` folder). The first run asks Hassan to log in with `npx wrangler login`. A manual alternative: Cloudflare dashboard → mandoub-mestk → New deployment → upload the `public` folder.
-- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v12`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
+- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v13`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
 
 ## How to test
 - `npx serve public` or `python -m http.server -d public`, then open it at a phone width (about 360–400px) in DevTools device mode.
@@ -51,9 +52,9 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 1. **Wait for the trial feedback.** The rep uses the app for 1–2 weeks while keeping his old WhatsApp routine in parallel. Fix whatever he gets stuck on first.
 2. **Ease-of-use pass** (proposed, not yet approved or built):
    - one main action button instead of two (new order and quick capture)
-   - customer picker becomes search, with recent customers first, instead of a `<select>`
+   - ~~customer picker becomes search, with recent customers first~~ — done
    - bigger tap targets and text
-   - each customer's frequent products shown first
+   - ~~each customer's frequent products shown first~~ — done
    - a 3-screen first-run guide
    - rarely used things (full ledger, settings) moved out of the way
 3. ~~Replace the demo products with the real product list~~ — done (إيفورا + وايت لايت). Carton contents/prices are not tracked (the rep asked to drop the amounts).
