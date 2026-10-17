@@ -197,7 +197,10 @@ textarea.inp{min-height:84px;resize:vertical}
 .upbar{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:85;background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:10px 16px;font-weight:800;font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,.2);max-width:92%}
 .bline{display:grid;grid-template-columns:1.4fr .9fr;gap:6px;padding:8px 0;border-top:1px solid var(--line)}
 .bline:first-child{border-top:0}
-.bline [data-bt]{grid-column:1/-1;padding:8px 12px;font-size:14px}
+.bmeta,.bfor{grid-column:1/-1;display:flex;gap:6px;align-items:center}
+.bmeta [data-bt]{flex:1;padding:8px 12px;font-size:14px}
+.bfor{font-size:13.5px;font-weight:700;color:var(--accent)}.bfor[hidden]{display:none}
+.bfor input{flex:1;padding:8px 10px}
 .lnote{margin-top:8px;padding:8px 10px;font-size:14px;font-weight:600}
 .items small{color:var(--muted);font-size:12.5px}
 .per{font-size:13px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
@@ -306,7 +309,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=21; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=22; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -538,7 +541,7 @@ function vCustomer(v){
   const last=orders[0];const al=alerts().filter(a=>a.cid===c.id&&!a.order&&!a.req);
   const freq={};orders.forEach(o=>o.items.forEach(i=>{const n=itemName(i);freq[n]=(freq[n]||0)+i.qty}));
   const top=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,4);
-  const ledger=[...S.payments.filter(p=>p.customerId===c.id).map(p=>({t:p.date,d:-p.amount,s:"تحصيل"+(p.note?` · ${p.note}`:""),k:`pay:${p.id}`})),
+  const ledger=[...S.payments.filter(p=>p.customerId===c.id).map(p=>({t:p.date,d:-p.amount,s:"تحصيل"+(payNote(p)?` · ${payNote(p)}`:""),k:`pay:${p.id}`})),
     ...(S.adjusts||[]).filter(a=>a.customerId===c.id).map(a=>({t:a.date,d:a.amount,s:(a.amount>=0?"زوّدت عليه":"نزّلت من عليه")+(a.note?` · ${a.note}`:""),k:`adj:${a.id}`}))
     ].sort((a,b)=>b.t-a.t).slice(0,30);
   const ob=c.opening||0;
@@ -600,46 +603,67 @@ function bindReqRows(v){v.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>
 /* one day's collections (the rep's «دفعات» note): list, total, and a picture or text for the colleague */
 filt.dcDay=isoDay(Date.now());
 const dayPays=iso=>{const t=fromIso(iso);const a=sod(t),b=a+DAY;return S.payments.filter(p=>p.date>=a&&p.date<b).sort((x,y)=>x.date-y.date)};
+// an old payment: money that came in on p.date but settles an older account (p.forDate)
+const oldTag=p=>p.forDate?`قديمة · عن يوم ${fmtDay(p.forDate)}`:"";
+const payNote=p=>[oldTag(p),p.note].filter(Boolean).join(" · ");
 function dayColSection(){const list=dayPays(filt.dcDay),sum=list.reduce((a,p)=>a+p.amount,0),d=fromIso(filt.dcDay);
+  const neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate);
+  const rows=ps=>ps.map(p=>`<button class="row" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${payNote(p)?`<br><span class="s">${esc(payNote(p))}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>`).join("");
+  const sub=(t,ps)=>`<div class="row s" style="font-size:12.5px;font-weight:800;padding:6px 14px;background:var(--sunk)">${t} · ${money(ps.reduce((a,p)=>a+p.amount,0))} ج</div>`;
   return `<section class="sec" id="dcSec"><h2>تحصيلات يوم <span class="count">${esc(daysSince(d)===0?"النهارده":fmtDay(d))}</span>
     <label class="link" style="position:relative;cursor:pointer;margin-inline-start:auto">غيّر اليوم<input type="date" id="dcDay" value="${filt.dcDay}" max="${isoDay(Date.now())}" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></h2>
-    ${list.length?`<div class="list ledger">${list.map(p=>`<button class="row" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${p.note?`<br><span class="s">${esc(p.note)}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>`).join("")}
+    ${list.length?`<div class="list ledger">${old.length?sub("دفعات اليوم",neu):""}${rows(neu)}${old.length?sub("دفعات قديمة",old)+rows(old):""}
       <div class="row"><span class="main t">المجموع · ${list.length} تحصيل</span><span class="amt">${money(sum)} ج</span></div></div>
       <div class="btns"><button class="btn wa" id="dcImg">ابعت صورة</button><button class="btn ghost" id="dcTxt">ابعت رسالة</button></div>`
       :`<div class="empty">مفيش تحصيلات اليوم ده · دوس «سجّل دفعات» واكتبهم زي النوتة</div>`}
     <button class="btn primary block" id="dcAdd">+ سجّل دفعات ${daysSince(d)===0?"النهارده":`يوم ${esc(fmtDay(d))}`}</button></section>`}
 /* write several collections at once, like the rep's «دفعات» note: name + amount (+ note) per line.
-   A name that isn't a customer yet becomes a new customer. */
-function batchColSheet(iso){const d=fromIso(iso);
-  const line=()=>`<div class="bline"><input class="inp" data-bn list="bcust" placeholder="اسم العميل" autocomplete="off"><input class="inp num" data-ba type="number" inputmode="decimal" placeholder="المبلغ" style="text-align:center"><input class="inp" data-bt placeholder="ملحوظة"></div>`;
-  const sh=sheet(`دفعات ${daysSince(d)===0?"النهارده":`يوم ${fmtDay(d)}`}`,`<p class="hint">اكتب كل عميل والمبلغ اللي حصّلته منه، زي النوتة. الملحوظة اختيارية، زي «الأسبوع اللي فات».</p>
+   «قديمة» on a line asks which day it's for. A name that isn't a customer yet becomes a new customer. */
+function batchColSheet(iso){
+  const line=()=>`<div class="bline"><input class="inp" data-bn list="bcust" placeholder="اسم العميل" autocomplete="off"><input class="inp num" data-ba type="number" inputmode="decimal" placeholder="المبلغ" style="text-align:center">
+    <div class="bmeta"><input class="inp" data-bt placeholder="ملحوظة"><button type="button" class="chip" data-bold aria-pressed="false">قديمة</button></div>
+    <label class="bfor" hidden>الدفعة دي عن يوم <input class="inp num" data-bf type="date" max="${isoDay(Date.now())}" style="direction:ltr"></label></div>`;
+  const sh=sheet("سجّل دفعات",`${dateField("bday",fromIso(iso),"اليوم اللي اتقبضت فيه الفلوس")}
+    <p class="hint">اكتب كل عميل والمبلغ اللي حصّلته منه، زي النوتة. لو الدفعة عن حساب قديم دوس «قديمة» واختار اليوم اللي هي عنه.</p>
     <datalist id="bcust">${S.customers.map(c=>`<option value="${esc(c.name)}">`).join("")}</datalist>
     <div id="blines">${line()+line()+line()}</div><button type="button" class="btn ghost block" id="bmore">+ سطر كمان</button>`,
     `<div class="total"><span>المجموع</span><span><span class="num" id="bsum">0</span> ج</span></div><button class="btn primary block" id="bsave">احفظ الدفعات</button>`);
-  const rows=()=>[...sh.querySelectorAll(".bline")].map(r=>({n:r.querySelector("[data-bn]").value.trim(),a:parseFloat(r.querySelector("[data-ba]").value)||0,t:r.querySelector("[data-bt]").value.trim()}));
+  bindDate("bday");
+  const rows=()=>[...sh.querySelectorAll(".bline")].map(r=>({n:r.querySelector("[data-bn]").value.trim(),a:parseFloat(r.querySelector("[data-ba]").value)||0,t:r.querySelector("[data-bt]").value.trim(),
+    old:r.querySelector("[data-bold]").getAttribute("aria-pressed")==="true",f:r.querySelector("[data-bf]").value}));
   const upd=()=>{$("#bsum").textContent=rows().reduce((s,r)=>s+(r.n?r.a:0),0).toLocaleString("en-US")};
   sh.addEventListener("input",upd);
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-bold]");if(!b)return;const r=b.closest(".bline"),on=b.getAttribute("aria-pressed")!=="true";
+    b.setAttribute("aria-pressed",on);r.querySelector(".bfor").hidden=!on;const f=r.querySelector("[data-bf]");
+    if(on&&!f.value){f.value=isoDay(fromIso($("#bday").value)-7*DAY);f.focus()}});
   sh.querySelector("#bmore").onclick=()=>{$("#blines").insertAdjacentHTML("beforeend",line());$("#blines").lastElementChild.querySelector("input").focus()};
-  sh.querySelector("#bsave").onclick=()=>{const ok=rows().filter(r=>r.n&&r.a>0);if(!ok.length)return toast("اكتب اسم ومبلغ واحد على الأقل");
-    const half=rows().filter(r=>(r.n&&!(r.a>0))||(!r.n&&r.a>0));if(half.length)return toast("فيه سطر ناقص اسم أو مبلغ");
-    let added=0;ok.forEach(r=>{let c=S.customers.find(x=>x.name.trim()===r.n);if(!c){c={id:uid(),name:r.n,owner:"",area:"",phone:"",opening:0};S.customers.push(c);added++}
-      S.payments.push({id:uid(),customerId:c.id,amount:r.a,date:fromIso(iso),note:r.t})});
-    save();closeSheet();toast(`اتسجل ${ok.length} دفعة${added?` · واتضاف ${added} عميل جديد`:""}`);render()}}
-function dayColText(iso){const list=dayPays(iso),d=fromIso(iso);
-  return [`تحصيلات يوم ${fmtDay(d)}`,"",...list.map(p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج${p.note?` (${p.note})`:""}`),"",
+  sh.querySelector("#bsave").onclick=()=>{const all=rows(),ok=all.filter(r=>r.n&&r.a>0);if(!ok.length)return toast("اكتب اسم ومبلغ واحد على الأقل");
+    if(all.some(r=>(r.n&&!(r.a>0))||(!r.n&&r.a>0)))return toast("فيه سطر ناقص اسم أو مبلغ");
+    if(ok.some(r=>r.old&&!r.f))return toast("اختار الدفعة القديمة عن أنهي يوم");
+    const day=$("#bday").value||iso;let added=0;
+    ok.forEach(r=>{let c=S.customers.find(x=>x.name.trim()===r.n);if(!c){c={id:uid(),name:r.n,owner:"",area:"",phone:"",opening:0};S.customers.push(c);added++}
+      const p={id:uid(),customerId:c.id,amount:r.a,date:fromIso(day),note:r.t};if(r.old)p.forDate=fromIso(r.f);S.payments.push(p)});
+    filt.dcDay=day;save();closeSheet();toast(`اتسجل ${ok.length} دفعة${added?` · واتضاف ${added} عميل جديد`:""}`);render()}}
+function dayColText(iso){const list=dayPays(iso),d=fromIso(iso),neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate);
+  const ln=p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج${p.forDate?` (عن يوم ${fmtDay(p.forDate)})`:""}${p.note?` (${p.note})`:""}`;
+  return [`تحصيلات يوم ${fmtDay(d)}`,"",...(old.length&&neu.length?["دفعات اليوم:"]:[]),...neu.map(ln),...(old.length?[...(neu.length?[""]:[]),"دفعات قديمة:",...old.map(ln)]:[]),"",
     `المجموع: ${list.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US")} ج`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
 async function dayColImage(iso){const F="Cairo,system-ui,Tahoma,sans-serif";try{await document.fonts.load(`800 40px Cairo`)}catch(e){}
   const list=dayPays(iso),d=new Date(fromIso(iso)),W=1080,P=44,RH=96,sum=list.reduce((a,p)=>a+p.amount,0);
-  const cv=document.createElement("canvas"),ctx=cv.getContext("2d");const H=230+list.length*RH+150+80;cv.width=W;cv.height=H;
+  const neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate),groups=old.length?[["دفعات اليوم",neu],["دفعات قديمة",old]].filter(g=>g[1].length):[["",neu]];
+  const cv=document.createElement("canvas"),ctx=cv.getContext("2d");const H=230+list.length*RH+groups.filter(g=>g[0]).length*70+150+80;cv.width=W;cv.height=H;
   ctx.direction="rtl";ctx.textBaseline="middle";const R=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
   ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);R(0,0,W,180,0,"#282825");
   ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;ctx.fillText(`تحصيلات يوم ${WD[d.getDay()]}`,W-P,66);
   ctx.font=`600 28px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText(`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}${S.settings.rep?` · ${S.settings.rep}`:""}`,W-P,128);
   ctx.textAlign="left";ctx.fillStyle="#E07A4F";ctx.font=`800 30px ${F}`;ctx.fillText(`${list.length} تحصيل`,P,66);
-  let y=204;list.forEach((p,i)=>{R(P,y,W-2*P,RH-10,18,i%2?"#FFFDF9":"#FFFFFF");
-    ctx.textAlign="right";ctx.fillStyle="#282825";ctx.font=`700 32px ${F}`;ctx.fillText(cust(p.customerId).name,W-P-24,y+(p.note?30:43));
-    if(p.note){ctx.font=`600 23px ${F}`;ctx.fillStyle="#6F6A60";ctx.fillText(p.note,W-P-24,y+64)}
-    ctx.textAlign="left";ctx.fillStyle="#2F7D4F";ctx.font=`800 34px ${F}`;ctx.fillText(`${p.amount.toLocaleString("en-US")} ج`,P+24,y+43);y+=RH});
+  let y=204;groups.forEach(([title,ps])=>{
+    if(title){const st=ps.reduce((a,p)=>a+p.amount,0);ctx.textAlign="right";ctx.fillStyle="#BD572F";ctx.font=`800 30px ${F}`;ctx.fillText(title,W-P,y+30);
+      ctx.textAlign="left";ctx.font=`700 26px ${F}`;ctx.fillText(`${st.toLocaleString("en-US")} ج`,P,y+30);y+=70}
+    ps.forEach((p,i)=>{R(P,y,W-2*P,RH-10,18,i%2?"#FFFDF9":"#FFFFFF");const sub=payNote(p);
+      ctx.textAlign="right";ctx.fillStyle="#282825";ctx.font=`700 32px ${F}`;ctx.fillText(cust(p.customerId).name,W-P-24,y+(sub?30:43));
+      if(sub){ctx.font=`600 23px ${F}`;ctx.fillStyle=p.forDate?"#BD572F":"#6F6A60";ctx.fillText(sub,W-P-24,y+64)}
+      ctx.textAlign="left";ctx.fillStyle="#2F7D4F";ctx.font=`800 34px ${F}`;ctx.fillText(`${p.amount.toLocaleString("en-US")} ج`,P+24,y+43);y+=RH})});
   y+=10;R(P,y,W-2*P,110,22,"#BD572F");ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 36px ${F}`;ctx.fillText("المجموع",W-P-28,y+55);
   ctx.textAlign="left";ctx.font=`800 42px ${F}`;ctx.fillText(`${sum.toLocaleString("en-US")} ج`,P+28,y+55);
   ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText("دفتر المندوب",W-P,H-40);ctx.textAlign="left";ctx.fillText("MESTK",P,H-40);
@@ -656,7 +680,7 @@ function vMoney(v){
   setTitle("الفلوس");
   const owed=S.customers.map(c=>({c,b:balance(c.id),lp:lastPayment(c.id)})).filter(x=>x.b>0).sort((a,b)=>b.b-a.b);
   const owedTotal=owed.reduce((a,x)=>a+x.b,0);
-  const moves=[...S.payments.map(p=>({t:p.date,a:p.amount,s:cust(p.customerId).name+(p.note?` · ${p.note}`:""),k:"in",id:`pay:${p.id}`})),...S.handovers.map(h=>({t:h.date,a:h.amount,s:"سلّمت للشركة"+(h.note?` · ${h.note}`:""),k:"out",id:`hand:${h.id}`}))].sort((a,b)=>b.t-a.t).slice(0,30);
+  const moves=[...S.payments.map(p=>({t:p.date,a:p.amount,s:cust(p.customerId).name+(payNote(p)?` · ${payNote(p)}`:""),k:"in",id:`pay:${p.id}`})),...S.handovers.map(h=>({t:h.date,a:h.amount,s:"سلّمت للشركة"+(h.note?` · ${h.note}`:""),k:"out",id:`hand:${h.id}`}))].sort((a,b)=>b.t-a.t).slice(0,30);
   v.innerHTML=`${demoBar()}
   <div class="hero"><div><div class="lbl">معاك دلوقتي</div><div class="big">${money(cashInHand())}<span class="cur">ج</span></div></div>
     <div><div class="lbl">برة عند العملاء</div><div class="big">${money(owedTotal)}<span class="cur">ج</span></div></div>
@@ -1004,12 +1028,18 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
   const sh=sheet(p?"تعديل تحصيل":"تحصيل",`${custSelect("pc",cid)}<div id="pbal" class="hint"></div>
     <label class="f">المبلغ<input class="inp num" id="pa" type="number" inputmode="decimal" placeholder="0" value="${p?p.amount:""}" style="text-align:right;direction:rtl"></label>
     ${dateField("pd",p?p.date:Date.now())}
-    <label class="f">ملاحظة (اختياري)<input class="inp" id="pn" value="${esc(p?p.note:"")}" placeholder="كاش، تحويل، عن الأسبوع اللي فات…"></label>`,
+    <div class="inrow" style="align-items:center"><button type="button" class="chip" id="pold" aria-pressed="${!!(p&&p.forDate)}" style="flex:none">دفعة قديمة</button>
+      <label class="f" id="pforL" ${p&&p.forDate?"":"hidden"} style="flex-direction:row;align-items:center;gap:8px">عن يوم<input class="inp num" id="pfor" type="date" max="${isoDay(Date.now())}" value="${p&&p.forDate?isoDay(p.forDate):""}" style="direction:ltr"></label></div>
+    <label class="f">ملاحظة (اختياري)<input class="inp" id="pn" value="${esc(p?p.note:"")}" placeholder="كاش، تحويل…"></label>`,
     `<button class="btn primary block" id="ps">${p?"احفظ التعديل":"سجّل التحصيل"}</button><button class="btn wa block" id="psh">${p?"احفظ وابعته":"سجّل وابعته للجروب"}</button>${p?`<button class="btn ghost block" id="pdl">امسح التحصيل ده</button>`:""}`);
   const upd=()=>{const c=$("#pc").value;const b=c?Math.round(balance(c)):0;$("#pbal").textContent=!c?"":b>0?`عليه دلوقتي ${b.toLocaleString("en-US")} ج`:b<0?`ليه عندك ${(-b).toLocaleString("en-US")} ج`:"حسابه خالص"};upd();$("#pc").onchange=upd;bindDate("pd");
+  sh.querySelector("#pold").onclick=e=>{const on=e.currentTarget.getAttribute("aria-pressed")!=="true";e.currentTarget.setAttribute("aria-pressed",on);$("#pforL").hidden=!on;
+    if(on&&!$("#pfor").value)$("#pfor").value=isoDay(fromIso($("#pd").value)-7*DAY)};
   const keep=share=>{const c=$("#pc").value,a=parseFloat($("#pa").value);if(!c)return toast("اختار العميل");if(!(a>0))return toast("اكتب المبلغ");
+    const isOld=sh.querySelector("#pold").getAttribute("aria-pressed")==="true";if(isOld&&!$("#pfor").value)return toast("اختار الدفعة القديمة عن أنهي يوم");
     const d={customerId:c,amount:a,date:fromIso($("#pd").value,p&&p.date),note:$("#pn").value.trim()};
-    let x=p;if(x)Object.assign(x,d);else{x={id:uid(),...d};S.payments.push(x)}save();closeSheet();
+    let x=p;if(x)Object.assign(x,d);else{x={id:uid(),...d};S.payments.push(x)}
+    if(isOld)x.forDate=fromIso($("#pfor").value,x.forDate);else delete x.forDate;save();closeSheet();
     toast(p?"اتعدل":`اتسجل ${a.toLocaleString("en-US")} ج · بقى معاك ${Math.round(cashInHand()).toLocaleString("en-US")} ج`);render();
     if(share)shareText(payMessage(x))};
   sh.querySelector("#ps").onclick=()=>keep(false);sh.querySelector("#psh").onclick=()=>keep(true);
@@ -1017,7 +1047,7 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
 }
 function payMessage(p){const c=cust(p.customerId);const b=balance(p.customerId);
   return ["تحصيل",`العميل: ${c.name}${c.owner?` (${c.owner})`:""}`,`المبلغ: ${p.amount.toLocaleString("en-US")} ج`,`اليوم: ${fmtDay(p.date)}`,
-    p.note?`ملاحظة: ${p.note}`:null,`الباقي عليه: ${Math.round(Math.max(0,b)).toLocaleString("en-US")} ج`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(Boolean).join("\n")}
+    p.forDate?`دفعة قديمة عن يوم ${fmtDay(p.forDate)}`:null,p.note?`ملاحظة: ${p.note}`:null,`الباقي عليه: ${Math.round(Math.max(0,b)).toLocaleString("en-US")} ج`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(Boolean).join("\n")}
 // share menu (pick a WhatsApp group or a person); WhatsApp's own picker where sharing isn't available
 function shareText(txt){if(navigator.share)navigator.share({text:txt}).catch(()=>{});else window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`,"_blank","noopener")}
 /* collections counter on Home: counts from the day the rep last zeroed it (today if he never did) */
