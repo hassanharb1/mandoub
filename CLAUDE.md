@@ -36,13 +36,14 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **Never block the first paint** (the rep's Android sat on the splash screen once): the Google Font loads non-blocking, photos load after render, and `sw.js` falls back to the cached copy after 4 s on a slow line. A red banner shows any JS error on screen so the rep can screenshot it.
 - On boot the app calls `navigator.storage.persist()`. A backup-reminder card appears on Home after 3 days without a backup, but only when demo mode is off.
 - **Voice:** the Web Speech API (`ar-EG`) is used on Android only, with an 8 s no-speech watchdog and a 25 s hard stop. On **iOS the mic button is hidden** and a hint points to the keyboard's own mic, because Web Speech hangs in iOS home-screen web apps.
+- **Wide screens (≥980px, laptop/desktop):** one `@media` block turns the bottom nav into a right sidebar with the brand, widens content to 1180px, lays Home/Customer/Money/Orders out in two columns (`main[data-view]`), shows the catalog in a 4–5 column grid, centres sheets as dialogs, and splits the order editor into two panes (`.oe-side` details + running order list `#opicked` | `.oe-main` products in two columns). On the phone those wrappers are `display:contents`, so the mobile layout is unchanged. Each device still has its own data until sync exists.
 - Design: MESTK brand colors (Charcoal `#282825`, Burnt Orange `#BD572F`, Warm Cream `#F5F0E7`), the Cairo font, RTL, light and dark themes through CSS tokens. Body text is about 15px, tap targets are at least 36px, and the side gutter is 16px.
 
 ## Hosting and deploy
 - **Live URL:** https://mandoub-mestk.hassan-mestkawy.workers.dev, served as a Cloudflare Worker with static assets. Hassan's Cloudflare account also hosts easy-drive-system and mestk-platform.
 - **Netlify is not an option:** `*.netlify.app` is blocked in Egypt (ERR_CONNECTION_TIMED_OUT without a VPN).
 - Deploy from this folder with `npx wrangler deploy` (it reads `wrangler.jsonc`, the worker name `mandoub-mestk` and the `./public` folder). The first run asks Hassan to log in with `npx wrangler login`. A manual alternative: Cloudflare dashboard → mandoub-mestk → New deployment → upload the `public` folder.
-- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v15`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
+- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v16`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
 
 ## How to test
 - `npx serve public` or `python -m http.server -d public`, then open it at a phone width (about 360–400px) in DevTools device mode.

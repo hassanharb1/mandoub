@@ -220,6 +220,49 @@ textarea.inp{min-height:84px;resize:vertical}
 .ledger .row .amt.plus{color:var(--bad)}.ledger .row .amt.minus{color:var(--ok)}
 .hint{font-size:12.5px;color:var(--muted);margin:0}
 .call{display:flex;gap:8px;flex-wrap:wrap}
+/* order editor panes: one column on the phone */
+.oe-side,.oe-main{display:contents}
+.oe-main>*{order:1}.oe-late{order:2}
+.oe-picked,.navbrand{display:none}
+/* ---------- wide screens (laptop / desktop): side nav, wider content, two columns ---------- */
+@media (min-width:980px){
+  body{font-size:15.5px}
+  nav.bottom{top:0;bottom:0;left:auto;right:0;width:230px;border-top:0;border-inline-end:1px solid var(--line)}
+  nav.bottom .in{display:flex;flex-direction:column;gap:4px;padding:18px 14px;max-width:none}
+  nav.bottom button{flex-direction:row;gap:12px;justify-content:flex-start;padding:12px 14px;border-radius:12px;font-size:15px}
+  nav.bottom button[aria-current="page"]{background:var(--accent-soft)}
+  nav.bottom .badge{position:static;margin-inline-start:auto}
+  .navbrand{display:block;font-weight:800;font-size:20px;padding:6px 14px 18px}
+  .navbrand small{display:block;font-size:12px;color:var(--muted);font-weight:700}
+  .app{max-width:none;margin:0;margin-inline-start:230px;padding-bottom:110px}
+  header.top,main{max-width:1180px;margin-inline:auto;padding-inline:32px}
+  header.top{padding-block:22px 12px}
+  .fab{inset-inline-start:auto;inset-inline-end:32px;bottom:28px}
+  .toast{bottom:40px}
+  main[data-view="home"],main[data-view="customer"],main[data-view="money"],main[data-view="orders"]{display:grid;grid-template-columns:1fr 1fr;gap:18px 24px;align-items:start}
+  main[data-view] > :not(.sec):not(.card){grid-column:1/-1}
+  main[data-view="orders"] > .sec{grid-column:1/-1}
+  main[data-view="home"] > .hero{grid-column:1/-1;grid-template-columns:repeat(4,1fr)}
+  main[data-view="home"] > .hero .full{grid-column:auto/span 4;max-width:420px}
+  main[data-view="money"] > .hero{grid-column:1/-1}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+  main[data-view="products"] > .seg{max-width:420px}
+  .scrim{align-items:center}
+  .sheet{border-radius:20px;max-height:88vh;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .sheet.full{max-width:1180px;width:94vw;height:90vh;border-radius:20px}
+  .sheet.full .sb:has(.oe-side){display:grid;grid-template-columns:360px 1fr;gap:24px;align-items:start}
+  .oe-side,.oe-main{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .oe-side{position:sticky;top:0}
+  .oe-picked{display:block;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;max-height:38vh;overflow-y:auto}
+  .oe-picked h4{margin:0 0 6px;font-size:15px}
+  .oe-picked .items{color:var(--fg)}
+  .oe-main #plist{display:grid;grid-template-columns:1fr 1fr}
+  .oe-main #plist .prod{border-top:1px solid var(--line)}
+  .oe-main #plist .prod:nth-child(-n+2){border-top:0}
+  .oe-main #plist .prod:nth-child(odd){border-inline-end:1px solid var(--line)}
+  .oe-main #plist .empty{grid-column:1/-1}
+  .lightbox .im{width:min(100%,520px)}
+}
 .tagline{font-size:12px;color:var(--muted);text-align:center;padding:10px 0 0}
 </style>
 
@@ -235,7 +278,7 @@ textarea.inp{min-height:84px;resize:vertical}
 
 <button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>سجّل بسرعة</button>
 
-<nav class="bottom"><div class="in" id="nav">
+<nav class="bottom"><div class="in" id="nav"><div class="navbrand">دفتر المندوب<small>MESTK</small></div>
   <button data-go="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>النهارده</button>
   <button data-go="customers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V9l9-5 9 5v12"/><path d="M8 21v-7h8v7"/><path d="M3 9h18"/></svg>العملاء</button>
   <button data-go="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l1 2h3v15H5V6h3z"/><path d="M9 12h6M9 16h4"/></svg>الطلبات</button>
@@ -420,7 +463,7 @@ function render(){
   document.querySelectorAll("#nav [data-go]").forEach(b=>b.setAttribute("aria-current",b.dataset.go===navKey?"page":"false"));
   const drafts=S.orders.filter(o=>o.status==="draft").length;const nb=document.querySelector('#nav [data-go="orders"]');
   nb.querySelector(".badge")?.remove();if(drafts)nb.insertAdjacentHTML("beforeend",`<span class="badge num">${drafts}</span>`);
-  const v=$("#view");v.onclick=null;$(".lightbox")?.remove();
+  const v=$("#view");v.onclick=null;v.dataset.view=route.v;$(".lightbox")?.remove();
   ({home:vHome,customers:vCustomers,customer:vCustomer,orders:vOrders,products:vProducts,money:vMoney})[route.v](v);
 }
 const demoBar=()=>S.demo?`<div class="demo">بيانات تجريبية للتجربة · امسحها من الإعدادات وابدأ بعملائك</div>`:"";
@@ -651,20 +694,24 @@ function orderEditor(init){
     if(sel[i.pid])sel[i.pid].n+=i.qty;else sel[i.pid]={n:i.qty,u,color:i.color||"",note:i.note||""}});
   const extras=src.filter(i=>!i.pid).map(i=>({...i}));
   let co=filt.co,cat="الكل",q="",picked=false;
-  const sh=sheet(editing?`تعديل طلب #${editing.no}`:"طلب جديد",`
+  // two wrappers: on the phone they dissolve into one column (display:contents + order),
+  // on a wide screen they become side-by-side panes: order details | products
+  const sh=sheet(editing?`تعديل طلب #${editing.no}`:"طلب جديد",`<div class="oe-side">
     ${custSelect("oc",editing?editing.customerId:init.customerId)}
     <button type="button" class="link" id="ocNew" style="align-self:flex-start;margin-top:-6px">+ عميل جديد</button>
     <div class="inrow" id="ocBox" hidden><input class="inp" id="ocName" placeholder="اسم المحل"><input class="inp" id="ocArea" placeholder="المنطقة"><button type="button" class="btn dark" id="ocAdd" style="flex:none">ضيف</button></div>
     <div class="inrow" style="align-items:flex-end"><label class="f" style="flex:0 0 110px">خصم العميل %<input class="inp num" id="odisc" type="number" inputmode="decimal" placeholder="مفيش" value="${esc(editing?(editing.disc||""):"")}" style="text-align:center"></label>
       <div class="f" style="display:flex;flex-direction:column;gap:5px;font-size:13.5px;font-weight:700;color:var(--muted)">الدفع<div class="seg" id="opay">${[["cash","كاش"],["credit","آجل"],["","بعدين"]].map(([k,t])=>`<button type="button" data-pay="${k}" aria-pressed="${(editing?editing.pay||"":"")===k}">${t}</button>`).join("")}</div></div></div>
+    <div class="oe-picked" id="opicked"></div>
+    <details class="oe-late"><summary class="link" style="cursor:pointer">+ منتج مش في القائمة</summary>
+      <div class="inrow" style="margin-top:8px"><input class="inp" id="exn" placeholder="اسم المنتج"><input class="inp" id="exq" type="number" inputmode="numeric" placeholder="الكمية" style="max-width:90px"><button class="btn dark" id="exa" style="flex:none">ضيف</button></div>
+      <div id="exl"></div></details>
+    <label class="f oe-late">ملاحظة<div class="inrow"><textarea class="inp" id="on" placeholder="ميعاد التسليم، أي حاجة تانية…">${esc(editing?editing.note:init.note||"")}</textarea>${micHTML("on")}</div></label></div>
+    <div class="oe-main">
     ${coSeg("pco",`<button data-picked aria-pressed="false">اخترت <span class="num" id="pcount">0</span></button>`)}
     ${searchBox("pq","دوّر باسم المنتج أو الكود")}
     <div class="chips" id="pcats"></div>
-    <div class="list" id="plist"></div>
-    <details><summary class="link" style="cursor:pointer">+ منتج مش في القائمة</summary>
-      <div class="inrow" style="margin-top:8px"><input class="inp" id="exn" placeholder="اسم المنتج"><input class="inp" id="exq" type="number" inputmode="numeric" placeholder="الكمية" style="max-width:90px"><button class="btn dark" id="exa" style="flex:none">ضيف</button></div>
-      <div id="exl"></div></details>
-    <label class="f">ملاحظة<div class="inrow"><textarea class="inp" id="on" placeholder="ميعاد التسليم، أي حاجة تانية…">${esc(editing?editing.note:init.note||"")}</textarea>${micHTML("on")}</div></label>`,
+    <div class="list" id="plist"></div></div>`,
     `<div class="total"><span id="ocount">0 أصناف</span></div>
      <div class="btns"><button class="btn ghost" id="oSave">${editing?"احفظ":"احفظ ولسه هبعته"}</button><button class="btn wa" id="oSend">${editing&&editing.status!=="draft"?"احفظ وابعت التعديل":"ابعته للزميل"}</button></div>`,{full:true});
   const lines=()=>Object.entries(sel).filter(([,x])=>x.n>0);
@@ -682,7 +729,9 @@ function orderEditor(init){
         <input class="inp lnote" data-note="${p.id}" value="${esc(x.note)}" placeholder="ملحوظة على الصنف (اللون، تبديل…)">`:""}</div>
       ${n?"":`<button class="addbtn" data-p="${p.id}">+ ضيف</button>`}</div>`};
   // no money total here: carton prices aren't known, so a sum would be wrong
-  const sums=()=>{const ls=lines();const n=ls.length+extras.length;$("#pcount").textContent=ls.length;$("#ocount").textContent=n===1?"صنف واحد":`${n} أصناف`};
+  const sums=()=>{const ls=lines();const n=ls.length+extras.length;$("#pcount").textContent=ls.length;$("#ocount").textContent=n===1?"صنف واحد":`${n} أصناف`;
+    // wide screens only: the order so far, beside the product list
+    $("#opicked").innerHTML=`<h4>الطلب (${n})</h4>`+(n?`<ul class="items">${ls.map(([id,x])=>`<li><span>${esc(prod(id)?.name||"")}${x.color?` · <b>${esc(x.color)}</b>`:""}</span><span style="flex:none"><span class="num">× ${x.n}</span> ${x.u==="ك"?"كرتونة":"قطعة"}</span></li>`).join("")}${extras.map(e=>`<li><span>${esc(e.name)}</span><span class="num">× ${e.qty}</span></li>`).join("")}</ul>`:`<p class="hint">اختار منتجات من القايمة</p>`)};
   const drawList=()=>{
     sh.querySelectorAll("#pco [data-co]").forEach(b=>b.setAttribute("aria-pressed",!picked&&!q&&cat!==USUAL&&b.dataset.co===co));
     sh.querySelector("[data-picked]").setAttribute("aria-pressed",picked);
