@@ -266,7 +266,7 @@ const WD=["الحد","الاتنين","التلات","الأربع","الخمي�
 /* ---------- storage ---------- */
 let mem=null;
 function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){} return mem}
-function save(){mem=S;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){mem=S;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}clearTimeout(save.t);save.t=setTimeout(()=>{try{notifySnapshot()}catch(e){}},800)}
 const uid=()=>Math.random().toString(36).slice(2,9);
 
 /* ---------- catalog (catalog.js) ---------- */
@@ -952,12 +952,19 @@ function settingsSheet(){const s=S.settings;
   const sh=sheet("الإعدادات",`<label class="f">اسمك<input class="inp" id="sr" value="${esc(s.rep)}" placeholder="بيظهر في الرسالة وفي التحية"></label>
     <div class="inrow"><label class="f">زميلك اللي بيسجل الطلبات<input class="inp" id="sc" value="${esc(s.colleague)}"></label><label class="f">رقم الواتساب بتاعه<input class="inp num" id="sp" type="tel" value="${esc(s.phone)}" placeholder="01xxxxxxxxx" style="text-align:right;direction:ltr"></label></div>
     <label class="f">لو طلب اتحفظ وما اتبعتش للزميل، يظهرلك بالأحمر في «محتاج تفتكر» بعد<select class="inp" id="srm"><option value="0" ${s.remind==0?"selected":""}>على طول</option><option value="1" ${s.remind==1?"selected":""}>يوم</option><option value="2" ${s.remind==2?"selected":""}>يومين</option></select></label>
+    <section class="sec"><h2>الإشعارات</h2>
+    <p class="hint">التطبيق يفكّرك بإشعار على الموبايل حتى لو قافله. كروم هو اللي بيحدد إمتى، غالبًا مرة أو مرتين في اليوم، ولازم التطبيق يكون متثبّت على الشاشة.</p>
+    <div class="list">${NOTIF.map(([k,t])=>`<label class="row" style="cursor:pointer"><span class="main t" style="font-weight:600">${t}</span><input type="checkbox" data-nt="${k}" ${notifOn(k)?"checked":""} style="width:22px;height:22px;accent-color:var(--accent)"></label>`).join("")}</div>
+    <div class="btns"><button class="btn dark" id="nOn">${notifState()}</button><button class="btn ghost" id="nTest">جرّب إشعار</button></div><p class="hint" id="nHint"></p></section>
     <section class="sec"><h2>البيانات</h2><p class="hint">البيانات محفوظة على الموبايل ده بس. خد نسخة احتياطية كل فترة.</p>
     <div class="btns"><button class="btn ghost" id="sx">نسخة احتياطية</button><label class="btn ghost" style="cursor:pointer">استرجاع نسخة<input type="file" id="si" accept="application/json" hidden></label></div>
     <div id="sxout"></div>
     ${S.demo?`<button class="btn dark block" id="sclr">امسح البيانات التجريبية وابدأ بعملائي</button>`:""}<button class="btn ghost block" id="sdemo">رجّع البيانات التجريبية</button></section>
     <p class="tagline">دفتر المندوب · نسخة تجريبية من MESTK</p>`,`<button class="btn primary block" id="ss">احفظ</button>`);
   sh.querySelector("#ss").onclick=()=>{Object.assign(s,{rep:$("#sr").value.trim(),colleague:$("#sc").value.trim(),phone:$("#sp").value.trim(),remind:+$("#srm").value});save();closeSheet();toast("اتحفظ");render()};
+  sh.querySelectorAll("[data-nt]").forEach(c=>c.onchange=()=>{s.notif={...(s.notif||{}),[c.dataset.nt]:c.checked};save()});
+  sh.querySelector("#nOn").onclick=async()=>{const r=await enableNotif();$("#nHint").textContent=r;sh.querySelector("#nOn").textContent=notifState()};
+  sh.querySelector("#nTest").onclick=async()=>{const r=await testNotif();if(r)$("#nHint").textContent=r};
   sh.querySelector("#sx").onclick=()=>backup($("#sxout"));
   sh.querySelector("#si").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.customers||!d.orders)throw 0;S=d;if(!S.adjusts)S.adjusts=[];save();closeSheet();toast("اترجعت النسخة");go("home")}catch(err){toast("الملف ده مش نسخة من التطبيق")}};r.readAsText(f)};
   const arm=(btn,fn)=>{btn.onclick=()=>{if(btn.dataset.armed){fn()}else{btn.dataset.armed=1;btn.textContent="متأكد؟ دوس تاني";}}};
@@ -965,8 +972,36 @@ function settingsSheet(){const s=S.settings;
   arm(sh.querySelector("#sdemo"),()=>{const keep={...S.settings};S=seed();S.settings=keep;save();closeSheet();toast("رجعت البيانات التجريبية");go("home")});
 }
 
+/* ---------- notifications ----------
+   No server: the page leaves a list of reminders (each with the time it becomes due) in Cache Storage,
+   and sw.js shows the due ones when Chrome wakes it (Periodic Background Sync, installed app on Android). */
+const NOTIF=[["draft","طلب اتحفظ وما اتبعتش للزميل"],["sent","طلب اتبعت ومحدش أكد إنه اتسجل"],["req","عميل مستني حاجة"],
+  ["late","عميل اتأخر عن ميعاد طلبه المعتاد"],["money","عميل عليه فلوس بقاله كتير ما اتحصلتش"],["backup","ما خدتش نسخة احتياطية"]];
+const notifOn=k=>(S.settings.notif||{})[k]!==false;
+const canNotify=()=>"Notification" in window&&"serviceWorker" in navigator;
+function notifState(){if(!canNotify())return"الإشعارات مش متاحة هنا";return Notification.permission==="granted"?"الإشعارات شغالة ✓":Notification.permission==="denied"?"الإشعارات مقفولة من المتصفح":"شغّل الإشعارات"}
+function notifySnapshot(){if(!("caches" in window))return;const items=[];const add=(k,due,t)=>{if(notifOn(k))items.push({k,due,t})};
+  S.orders.filter(o=>o.status==="draft").forEach(o=>add("draft",o.created+(+S.settings.remind||0)*DAY,`طلب ${cust(o.customerId).name} لسه ما اتبعتش`));
+  S.orders.filter(o=>o.status==="sent").forEach(o=>add("sent",(o.hist.sent||o.created)+2*DAY,`طلب #${o.no} اتبعت ومحدش أكد تسجيله`));
+  S.requests.filter(r=>!r.done).forEach(r=>add("req",r.created+DAY,`${cust(r.customerId).name} مستني: ${r.text}`));
+  S.customers.forEach(c=>{const ts=S.orders.filter(o=>o.customerId===c.id).map(o=>o.created).sort((a,b)=>a-b);
+    if(ts.length>=3){let g=0;for(let i=1;i<ts.length;i++)g+=ts[i]-ts[i-1];const avg=Math.max(1,Math.round(g/(ts.length-1)/DAY));
+      add("late",sod(ts[ts.length-1])+Math.max(avg*1.5,avg+5)*DAY,`${c.name} اتأخر عن طلبه المعتاد · كلّمه`)}
+    const b=balance(c.id);if(b>0)add("money",(lastPayment(c.id)||S.since||Date.now())+14*DAY,`${c.name} عليه ${Math.round(b).toLocaleString("en-US")} ج`)});
+  if(!S.demo)add("backup",(S.lastBackup||S.since||Date.now())+3*DAY,"خد نسخة احتياطية من الإعدادات");
+  caches.open("mandoub-notify").then(c=>c.put("notify.json",new Response(JSON.stringify({items,at:Date.now()}),{headers:{"Content-Type":"application/json"}}))).catch(()=>{})}
+async function enableNotif(){if(!canNotify())return"الموبايل ده أو المتصفح ده مش بيدعم الإشعارات.";
+  const p=await Notification.requestPermission();if(p!=="granted")return"لازم تسمح بالإشعارات علشان تشتغل. لو قفلتها، افتحها من إعدادات كروم للموقع ده.";
+  notifySnapshot();const reg=await navigator.serviceWorker.ready;
+  if(!("periodicSync" in reg))return"الإشعارات اتسمحت، بس الموبايل ده مش بيصحّي التطبيق في الخلفية (زي الآيفون). هتشوف التذكيرات لما تفتحه.";
+  try{await reg.periodicSync.register("mandoub-remind",{minInterval:6*3600e3});return"تمام ✓ هيفكّرك لما يكون فيه حاجة محتاج تفتكرها."}
+  catch(e){return"الإشعارات اتسمحت. علشان التذكير في الخلفية يشتغل، ثبّت التطبيق على الشاشة الرئيسية من ⋮ ← Add to Home screen."}}
+async function testNotif(){if(!canNotify()||Notification.permission!=="granted")return"شغّل الإشعارات الأول.";
+  const reg=await navigator.serviceWorker.ready;const n=alerts().length;
+  reg.showNotification("دفتر المندوب",{body:n?`عندك ${n} حاجات في «محتاج تفتكر»`:"كله تمام، مفيش حاجة متأخرة",icon:"icon-192.png",badge:"icon-192.png",tag:"mandoub-test",dir:"rtl",lang:"ar"});return""}
+
 /* ---------- boot ---------- */
-render();loadPhotos();
+render();loadPhotos();setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);
 if("serviceWorker" in navigator&&window.isSecureContext&&window.top===window.self){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)render()});
 })();

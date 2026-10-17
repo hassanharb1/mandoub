@@ -23,6 +23,7 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **الفلوس (Money):** record collections, record «سلّمت للشركة» handovers to the company, cash in hand = collections − handovers, money owed, and recent movements. Collections and handovers have a **date (day picker, weekday shown)** and can be **edited or deleted** by tapping them (in الفلوس or the customer's ledger). «سجّل وابعته للجروب» saves a collection and opens the share menu with a short text (customer, amount, day, remaining balance) so it can go to a WhatsApp group or a person.
 - **Home collections counter:** «حصّلت النهارده» counts from `S.colFrom` (start of today if never set). Tapping it lists those collections (editable) and «صفّر العداد» sets `S.colFrom` to now — nothing is deleted and cash in hand doesn't change.
 - **رصيد أول المدة (opening balance):** flexible — عليه (owes) or ليه (credit, stored negative), with a «لحد يوم» date (`openingDate`); editable from the customer form or by tapping it in the ledger.
+- **Notifications (no server):** on every save the page writes `notify.json` to the `mandoub-notify` cache: reminders for the 6 «محتاج تفتكر» kinds (draft not sent, sent not confirmed, customer waiting, late customer, overdue balance, no backup), each with the time it becomes due and switchable in Settings (`S.settings.notif`). `sw.js` shows the due ones on `periodicsync` (Chrome Android, installed app only, timing chosen by Chrome, roughly once or twice a day) and won't repeat the same list within 20 h. Not on iOS. Reliable, specific pushes need the sync server or the APK.
 - **Settings:** rep name, colleague name and WhatsApp number, a reminder delay for unsent orders, backup and restore as JSON, clearing the demo data, restoring the demo data.
 - **Commission was removed on purpose.** Hassan asked for that. Do not add it back.
 
@@ -41,7 +42,7 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
 - **Live URL:** https://mandoub-mestk.hassan-mestkawy.workers.dev, served as a Cloudflare Worker with static assets. Hassan's Cloudflare account also hosts easy-drive-system and mestk-platform.
 - **Netlify is not an option:** `*.netlify.app` is blocked in Egypt (ERR_CONNECTION_TIMED_OUT without a VPN).
 - Deploy from this folder with `npx wrangler deploy` (it reads `wrangler.jsonc`, the worker name `mandoub-mestk` and the `./public` folder). The first run asks Hassan to log in with `npx wrangler login`. A manual alternative: Cloudflare dashboard → mandoub-mestk → New deployment → upload the `public` folder.
-- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v14`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
+- **On every release, bump `CACHE` in `public/sw.js`** (currently `mandoub-v15`) so phones pick up the update. `sw.js` is network-first for the page, so the update arrives on the next app open. The user's data is never touched by a deploy.
 
 ## How to test
 - `npx serve public` or `python -m http.server -d public`, then open it at a phone width (about 360–400px) in DevTools device mode.
