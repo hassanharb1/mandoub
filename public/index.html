@@ -197,6 +197,7 @@ textarea.inp{min-height:84px;resize:vertical}
 .upbar{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:85;background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:10px 16px;font-weight:800;font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,.2);max-width:92%}
 textarea.note{min-height:150px;font-size:16px;line-height:1.9}
 .nrow .main{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.nrow .main>br{display:none}
+.nbal{font-size:12.5px;color:var(--muted)}.nbal .neg{color:var(--bad);font-weight:800}
 .nask{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:13px;font-weight:800;color:var(--accent)}
 .nask .chip{min-height:32px;font-size:13px}
 .nerr{background:var(--bad-soft)}.nerr .s{color:var(--bad);font-weight:700}
@@ -319,7 +320,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=25; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=26; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -668,10 +669,13 @@ function noteSheet(iso){const dr=S.noteDraft||{};iso=iso||dr.day||isoDay(Date.no
     const m=x.name?matchCust(x.name):{cands:[]};const p=pick[k];
     const c=p&&p!=="new"?S.customers.find(y=>y.id===p):m.c;return {...x,k,c,isNew:p==="new"||(!c&&!m.cands.length),cands:c||p?[]:m.cands}});
   const draw=()=>{const ls=lines();const ok=ls.filter(x=>!x.err);
+    // what the customer owes before and after this line (several lines for one customer add up)
+    const run={};ok.forEach(x=>{if(!x.c)return;const b=x.c.id in run?run[x.c.id]:balance(x.c.id);run[x.c.id]=b-x.amount;if(b>0)x.bal=[b,b-x.amount]});
     $("#nsum").textContent=ok.reduce((a,x)=>a+x.amount,0).toLocaleString("en-US");
     sh.querySelector("#nsave").textContent=ok.length?`احفظ ${ok.length} دفعة`:"احفظ";
     $("#npv").innerHTML=ls.length?`<div class="list ledger">${ls.map(x=>x.err?`<div class="row nerr"><span class="main"><span class="t">${esc(x.raw)}</span><br><span class="s">${x.err}</span></span></div>`
-      :`<div class="row nrow"><span class="main"><span class="t">${esc(x.c?x.c.name:x.name)}</span>${x.c?` <span class="pill ok">✓</span>`:x.isNew?` <span class="pill warn">عميل جديد</span>`:""}
+      :`<div class="row nrow"><span class="main"><span class="t">${esc(x.c?x.c.name:x.name)}${x.c?` <span class="pill ok">✓</span>`:x.isNew?` <span class="pill warn">عميل جديد</span>`:""}</span>
+        ${x.bal?`<span class="s nbal">عليه <span class="num">${Math.round(x.bal[0]).toLocaleString("en-US")}</span> ← <span class="num ${x.bal[1]<0?"neg":""}">${Math.round(x.bal[1]).toLocaleString("en-US")}</span></span>`:""}
         ${x.note?`<br><span class="s">${esc(x.note)}</span>`:""}
         ${x.cands.length?`<span class="nask">تقصد مين؟ ${x.cands.map(c=>`<button type="button" class="chip" data-np="${esc(x.k)}|${c.id}">${esc(custLabel(c))}</button>`).join("")}<button type="button" class="chip" data-np="${esc(x.k)}|new">عميل جديد</button></span>`:""}
         ${x.old?`<label class="bfor">دفعة قديمة عن يوم <input class="inp num" type="date" data-nf="${esc(x.raw)}" value="${oldFor[x.raw]||(oldFor[x.raw]=isoDay(fromIso($("#nday").value||iso)-7*DAY))}" max="${isoDay(Date.now())}" style="direction:ltr"></label>`:""}</span>
