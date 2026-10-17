@@ -309,7 +309,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=22; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=23; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1204,12 +1204,17 @@ async function testNotif(){if(!canNotify()||Notification.permission!=="granted")
    The newest version number is read from sw.js on the server (CACHE "mandoub-vN"). Updating clears the app's
    cached files (never the data, which lives in localStorage) and reloads, so the new files come down. */
 async function latestVersion(){try{const r=await fetch("sw.js?check="+Date.now(),{cache:"no-store"});const m=(await r.text()).match(/mandoub-v(\d+)/);return m?+m[1]:null}catch(e){return null}}
-async function applyUpdate(){toast("بحدّث…");try{const reg=await navigator.serviceWorker?.getRegistration();if(reg)await reg.update().catch(()=>{});
+async function applyUpdate(){toast("بحدّث…");
+  // only clear the saved copy when the server answers, or the app would have nothing to open offline
+  if(await latestVersion()===null){toast("مقدرتش أوصل للنت. جرّب على الداتا");return}
+  try{const reg=await navigator.serviceWorker?.getRegistration();if(reg)await reg.update().catch(()=>{});
   const ks=await caches.keys();await Promise.all(ks.filter(k=>k!=="mandoub-notify").map(k=>caches.delete(k)))}catch(e){}
   location.reload()}
+function upBar(text,fn){if($("#upBar"))return;const b=document.createElement("button");b.id="upBar";b.className="upbar";b.textContent=text;b.onclick=fn;document.body.appendChild(b)}
 // on open: if a newer version is on the server, offer it in a small bar
-setTimeout(async()=>{const v=await latestVersion();if(!v||v<=VERSION||$("#upBar"))return;
-  const b=document.createElement("button");b.id="upBar";b.className="upbar";b.textContent=`فيه نسخة جديدة من البرنامج · دوس علشان تحدّث`;b.onclick=applyUpdate;document.body.appendChild(b)},3000);
+setTimeout(async()=>{const v=await latestVersion();if(v&&v>VERSION)upBar("فيه نسخة جديدة من البرنامج · دوس علشان تحدّث",applyUpdate)},3000);
+// a slow line opened the saved copy and the fresh one arrived afterwards: one tap shows it (no cache clearing needed)
+navigator.serviceWorker?.addEventListener("message",e=>{if(e.data&&e.data.type==="fresh")latestVersion().then(v=>{if(v&&v>VERSION)upBar("النسخة الجديدة نزلت · دوس علشان تفتحها",()=>location.reload())})});
 
 /* ---------- boot ---------- */
 render();loadPhotos();setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);

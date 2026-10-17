@@ -1,7 +1,7 @@
-const CACHE="mandoub-v22";
+const CACHE="mandoub-v23";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
-self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL)}).then(()=>self.skipWaiting()))});
+self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL.map(u=>new Request(u,{cache:"reload"})))}).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE&&k!=="mandoub-notify").map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 const put=(req,res)=>{if(res&&res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(req,cp))}return res};
 self.addEventListener("fetch",e=>{
@@ -15,7 +15,11 @@ self.addEventListener("fetch",e=>{
     e.respondWith(new Promise(resolve=>{let done=false;
       const fromCache=()=>caches.match(e.request).then(r=>r||caches.match("index.html"));
       const t=setTimeout(()=>fromCache().then(r=>{if(r&&!done){done=true;resolve(r)}}),4000);
-      fetch(e.request).then(res=>{put(e.request,res);clearTimeout(t);if(!done){done=true;resolve(res)}})
+      // no-cache: always ask the server (it answers "not modified" cheaply), so the browser's own HTTP cache never hands back an old file
+      fetch(new Request(e.request.url,{cache:"no-cache",credentials:"same-origin"})).then(res=>{put(e.request,res);clearTimeout(t);
+          if(!done){done=true;resolve(res)}
+          // the page already opened from the saved copy: tell it a fresh copy has arrived
+          else if(e.request.mode==="navigate"&&res.ok)self.clients.matchAll({type:"window"}).then(cs=>cs.forEach(c=>c.postMessage({type:"fresh"})))})
         .catch(()=>{clearTimeout(t);fromCache().then(r=>{if(!done){done=true;resolve(r||Response.error())}})})}));
   } else if(url.host.includes("fonts.g")){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>put(e.request,res))));
