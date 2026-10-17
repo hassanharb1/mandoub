@@ -1,4 +1,4 @@
-const CACHE="mandoub-v9";
+const CACHE="mandoub-v10";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL)}).then(()=>self.skipWaiting()))});
