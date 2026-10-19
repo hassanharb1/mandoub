@@ -203,6 +203,12 @@ textarea.note{min-height:150px;font-size:16px;line-height:1.9}
 .nrow .main{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.nrow .main>br{display:none}
 .nbal{font-size:12.5px;color:var(--muted)}.nbal .neg{color:var(--bad);font-weight:800}
 .nask{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:13px;font-weight:800;color:var(--accent)}
+.oline+.oline{border-top:1px dashed var(--line);margin-top:10px;padding-top:10px}
+.ochips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.ochips>span{font-size:12px;font-weight:800;color:var(--muted);min-width:46px}
+.ochips .chip{padding:4px 11px;font-size:13px}
+.ox{margin-inline-start:auto;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-weight:800}
+.omore{margin-top:10px;border:1px dashed var(--accent);background:none;color:var(--accent);border-radius:10px;padding:6px 12px;font-weight:800;font-size:13.5px}
 .nask .chip{min-height:32px;font-size:13px}
 .nerr{background:var(--bad-soft)}.nerr .s{color:var(--bad);font-weight:700}
 .bfor{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:13px;font-weight:700;color:var(--accent);width:100%}
@@ -331,7 +337,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=30; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=31; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -691,7 +697,7 @@ function orderCard(o){const s=STATUSES[SIDX[o.status]];const c=cust(o.customerId
   return `<div class="card" data-o="${o.id}"><div class="hd"><span class="main"><b>${esc(c.name)}</b><br><span class="s" style="color:var(--muted);font-size:13px">#<span class="num">${o.no}</span> · ${esc(when(o.created))}</span></span>
   <span class="pill st-${o.status}">${s.t}</span></div>
   <div class="steps">${STATUSES.slice(1).map((x,i)=>`<i class="${SIDX[o.status]>i?"on":""}"></i>`).join("")}</div>
-  <ul class="items">${o.items.slice(0,3).map(i=>`<li><span>${esc(itemName(i))}${i.color?` · <b>${esc(i.color)}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">× ${i.qty}</span> ${unitName(i)}</span></li>`).join("")}${o.items.length>3?`<li><span>و ${o.items.length-3} أصناف كمان</span></li>`:""}</ul>
+  <ul class="items">${o.items.slice(0,3).map(i=>`<li><span>${esc(itemName(i))}${itemTags(i)?` · <b>${esc(itemTags(i))}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">× ${i.qty}</span> ${unitName(i)}</span></li>`).join("")}${o.items.length>3?`<li><span>و ${o.items.length-3} أصناف كمان</span></li>`:""}</ul>
   ${s.next?`<div class="btns">${o.status==="draft"?`<button class="btn wa sm" data-send="${o.id}">ابعته واتساب</button>`:`<button class="btn ghost sm" data-adv="${o.id}">${s.next} ✓</button>`}</div>`:""}</div>`}
 // one line per order on Home: customer, number, when, status
 function orderRow(o){const s=STATUSES[SIDX[o.status]];return `<button class="row" data-o="${o.id}"><span class="main"><span class="t">${esc(cust(o.customerId).name)}</span><br>
@@ -981,8 +987,9 @@ function hiddenSheet(){const sh=sheet("منتجات مخفية",`<p class="hint"
     save();rebuildCat(S.cat);render();b.closest(".row").remove();toast("رجع للقايمة")})}
 const priceTxt=p=>p.price?`${money(p.price)} ج للقطعة`:"من غير سعر";
 // colours named in the product name (e.g. "ابيض/اسود") become quick picks on the order line
-const COLORS=["ابيض دهبي","اسود دهبي","ابيض","اسود","ورم","دهبي","فضي","RGB"];
-function colorsOf(p){let n=p.name;const out=[];COLORS.forEach(c=>{if(n.includes(c)){out.push(c);n=n.split(c).join(" ")}});return out.length>1?out:[]}
+// every order line can say the body colour and the light colour; one product can be ordered in several of them
+const BODY=["ابيض","اسود","دهبي","ابيض في اسود"],LIGHT=["ابيض","ورم"];
+const itemTags=i=>[i.color&&`اللون: ${i.color}`,i.light&&`الإضاءة: ${i.light}`].filter(Boolean).join(" · ");
 // search ignores the company and category tabs, so a name typed anywhere is found
 function findProducts(co,cat,q){q=(q||"").trim();
   if(q){const ws=q.split(/\s+/);return CAT.products.filter(p=>ws.every(w=>has(p.name+" "+(p.code||"")+" "+coName(p.co),w)))}
@@ -1026,9 +1033,13 @@ function vProducts(v){
 function orderEditor(init){
   init=init||{};const editing=init.id?S.orders.find(o=>o.id===init.id):null;
   const src=editing?editing.items:init.items||[];
-  // sel[pid] = {n: count, u: "ق" piece | "ك" carton, color, note}
-  const sel={};src.forEach(i=>{if(!i.pid)return;const u=i.unit==="ك"?"ك":"ق";
-    if(sel[i.pid])sel[i.pid].n+=i.qty;else sel[i.pid]={n:i.qty,u,color:i.color||"",note:i.note||"",per:i.per||S.carton[i.pid]||0}});
+  // sel[pid] = {per: pieces per carton, ls: [{n: count, u: "ق" piece | "ك" carton, color, light, note}]}: one line per colour
+  const sel={},newL=n=>({n:n||0,u:"ق",color:"",light:"",note:""});
+  src.forEach(i=>{if(!i.pid)return;const x=sel[i.pid]=sel[i.pid]||{per:i.per||S.carton[i.pid]||0,ls:[]};
+    x.ls.push({n:i.qty,u:i.unit==="ك"?"ك":"ق",color:i.color||"",light:i.light||"",note:i.note||""});if(i.per)x.per=i.per});
+  const L=ref=>{const [id,k]=ref.split(":");return sel[id]&&sel[id].ls[+k||0]};
+  const qtyOf=id=>sel[id]?sel[id].ls.reduce((a,l)=>a+l.n,0):0;
+  const flat=()=>lines().flatMap(([pid,x])=>x.ls.filter(l=>l.n>0).map(l=>({pid,...l,per:x.per})));
   let subManual=editing&&editing.subManual!=null?editing.subManual:null,discMode=editing&&editing.discAmt!=null?"amt":"pct";
   const extras=src.filter(i=>!i.pid).map(i=>({...i}));
   let co=filt.co,cat="الكل",q="",picked=false;
@@ -1058,30 +1069,35 @@ function orderEditor(init){
     <div class="list" id="plist"></div></div>`,
     `<div class="total"><span id="ocount">0 أصناف</span><span><span class="num" id="ofnet">0</span> ج</span></div>
      <div class="btns"><button class="btn ghost" id="oSave">${editing?"احفظ":"احفظ ولسه هبعته"}</button><button class="btn wa" id="oSend">${editing&&editing.status!=="draft"?"احفظ وابعت التعديل":"ابعته للزميل"}</button></div>`,{full:true});
-  const lines=()=>Object.entries(sel).filter(([,x])=>x.n>0);
+  const lines=()=>Object.entries(sel).filter(([id])=>qtyOf(id)>0);
   // what this customer usually takes (how many of his orders had it), shown first
   const USUAL="بياخد عادةً";
   const usual=()=>{const cid=$("#oc").value;if(!cid)return[];const n={};
     S.orders.forEach(o=>{if(o.customerId===cid&&o!==editing)new Set(o.items.map(i=>i.pid).filter(Boolean)).forEach(pid=>n[pid]=(n[pid]||0)+1)});
     return Object.keys(n).sort((a,b)=>n[b]-n[a]).map(prod).filter(p=>p&&PMAP[p.id]&&!p.hide).slice(0,12)};
-  const row=p=>{const x=sel[p.id],n=x?x.n:0;
+  const lineHTML=(p,k,l)=>{const ref=`${p.id}:${k}`;
+    return `<div class="oline"><div class="ctl"><div class="stepper"><button class="add" data-p="${ref}" aria-label="زوّد">+</button><input class="num" data-q="${ref}" value="${l.n}" inputmode="numeric" aria-label="العدد"><button data-m="${ref}" aria-label="أقل">−</button></div>
+        <div class="useg" role="group" aria-label="قطعة ولا كرتونة"><button data-u="${ref}|ق" aria-pressed="${l.u==="ق"}" title="قطعة">ق</button><button data-u="${ref}|ك" aria-pressed="${l.u==="ك"}" title="كرتونة">ك</button></div>
+        ${k?`<button class="ox" data-lx="${ref}" aria-label="شيل اللون ده">✕</button>`:""}</div>
+      <div class="ochips"><span>اللون</span>${BODY.map(c=>`<button class="chip" data-col="${ref}|${c}" aria-pressed="${l.color===c}">${c}</button>`).join("")}</div>
+      <div class="ochips"><span>الإضاءة</span>${LIGHT.map(c=>`<button class="chip" data-lt="${ref}|${c}" aria-pressed="${l.light===c}">${c}</button>`).join("")}</div>
+      <input class="inp lnote" data-note="${ref}" value="${esc(l.note)}" placeholder="ملحوظة (لون تاني، تبديل…)"></div>`};
+  const row=p=>{const x=sel[p.id],n=qtyOf(p.id);
     return `<div class="prod ${n?"sel":""}" data-row="${p.id}"><button class="thumb" data-zoom="${p.id}" aria-label="كبّر الصورة">${imgHTML(p)}</button>
       <div class="main"><div class="t">${esc(p.name)}${p.code?`<span class="code">${esc(p.code)}</span>`:""}</div><div class="s">${q||picked?esc(coName(p.co))+" · ":""}${priceTxt(p)}</div>
-      ${n?`<div class="ctl"><div class="stepper"><button class="add" data-p="${p.id}" aria-label="زوّد">+</button><input class="num" data-q="${p.id}" value="${n}" inputmode="numeric" aria-label="العدد"><button data-m="${p.id}" aria-label="أقل">−</button></div>
-        <div class="useg" role="group" aria-label="قطعة ولا كرتونة"><button data-u="${p.id}|ق" aria-pressed="${x.u==="ق"}" title="قطعة">ق</button><button data-u="${p.id}|ك" aria-pressed="${x.u==="ك"}" title="كرتونة">ك</button></div></div>
-        ${colorsOf(p).length?`<div class="chips" style="margin-top:8px">${colorsOf(p).map(c=>`<button class="chip" data-col="${p.id}|${esc(c)}" aria-pressed="${x.color===c}">${esc(c)}</button>`).join("")}</div>`:""}
-        ${x.u==="ك"?`<label class="per ${x.per?"":"need"}">الكرتونة فيها <input class="num" data-per="${p.id}" value="${x.per||""}" inputmode="numeric" placeholder="؟"> قطعة${x.per?"":" · علشان تتحسب في المجموع"}</label>`:""}
-        <input class="inp lnote" data-note="${p.id}" value="${esc(x.note)}" placeholder="ملحوظة على الصنف (اللون، تبديل…)">`:""}</div>
+      ${n?`${x.ls.map((l,k)=>lineHTML(p,k,l)).join("")}
+        ${x.ls.some(l=>l.u==="ك")?`<label class="per ${x.per?"":"need"}">الكرتونة فيها <input class="num" data-per="${p.id}" value="${x.per||""}" inputmode="numeric" placeholder="؟"> قطعة${x.per?"":" · علشان تتحسب في المجموع"}</label>`:""}
+        <button type="button" class="omore" data-more="${p.id}">+ لون تاني</button>`:""}</div>
       ${n?"":`<button class="addbtn" data-p="${p.id}">+ ضيف</button>`}</div>`};
-  const draft=()=>({items:[...lines().map(([pid,x])=>({pid,qty:x.n,unit:x.u,per:x.u==="ك"?x.per:0,price:prod(pid)?.price||0})),...extras],
+  const draft=()=>({items:[...flat().map(l=>({pid:l.pid,qty:l.n,unit:l.u,per:l.u==="ك"?l.per:0,price:prod(l.pid)?.price||0})),...extras],
     subManual,disc:discMode==="pct"?parseFloat($("#odisc").value)||0:0,discAmt:discMode==="amt"?(parseFloat($("#odiscA").value)||0):null});
-  const sums=()=>{const ls=lines();const n=ls.length+extras.length;$("#pcount").textContent=ls.length;$("#ocount").textContent=n===1?"صنف واحد":`${n} أصناف`;
+  const sums=()=>{const ls=flat();const n=ls.length+extras.length;$("#pcount").textContent=lines().length;$("#ocount").textContent=n===1?"صنف واحد":`${n} أصناف`;
     const m=orderMoney(draft());$("#osub").textContent=fmtM(m.sub);$("#opcs").textContent=m.pcs?`(${m.pcs} قطعة)`:"";
     $("#onet").textContent=$("#ofnet").textContent=fmtM(m.net);$("#osubEd").textContent=m.manual?"بإيدك ✎":"تعديل";
     if(discMode==="pct")$("#odiscA").value=m.disc?Math.round(m.disc*100)/100:"";else $("#odisc").value=m.disc?m.pct:"";
     const ms=$("#omiss");ms.hidden=m.manual||!m.missing;ms.textContent=`${m.missing} صنف مش داخل في المجموع (كرتونة من غير عدد قطع، أو منتج مش في الليستة). اكتب عدد القطع، أو دوس «تعديل» واكتب المجموع بإيدك.`;
     // wide screens only: the order so far, beside the product list
-    $("#opicked").innerHTML=`<h4>الطلب (${n})</h4>`+(n?`<ul class="items">${ls.map(([id,x])=>`<li><span>${esc(prod(id)?.name||"")}${x.color?` · <b>${esc(x.color)}</b>`:""}</span><span style="flex:none"><span class="num">× ${x.n}</span> ${x.u==="ك"?"كرتونة":"قطعة"}</span></li>`).join("")}${extras.map(e=>`<li><span>${esc(e.name)}</span><span class="num">× ${e.qty}</span></li>`).join("")}</ul>`:`<p class="hint">اختار منتجات من القايمة</p>`)};
+    $("#opicked").innerHTML=`<h4>الطلب (${n})</h4>`+(n?`<ul class="items">${ls.map(x=>`<li><span>${esc(prod(x.pid)?.name||"")}${itemTags(x)?` · <b>${esc(itemTags(x))}</b>`:""}</span><span style="flex:none"><span class="num">× ${x.n}</span> ${x.u==="ك"?"كرتونة":"قطعة"}</span></li>`).join("")}${extras.map(e=>`<li><span>${esc(e.name)}</span><span class="num">× ${e.qty}</span></li>`).join("")}</ul>`:`<p class="hint">اختار منتجات من القايمة</p>`)};
   const drawList=()=>{
     sh.querySelectorAll("#pco [data-co]").forEach(b=>b.setAttribute("aria-pressed",!picked&&!q&&cat!==USUAL&&b.dataset.co===co));
     sh.querySelector("[data-picked]").setAttribute("aria-pressed",picked);
@@ -1093,30 +1109,35 @@ function orderEditor(init){
     $("#exl").innerHTML=extras.map((e,i)=>`<div class="row"><span class="main t">${esc(e.name)}</span><span class="num">× ${e.qty}</span><button class="link" data-xadd="${i}">ضيفه للقايمة</button><button class="link" data-xr="${i}">شيل</button></div>`).join("");
     sums()};
   // redraw only the touched row so the list doesn't jump while tapping
-  const redraw=id=>{const el=sh.querySelector(`[data-row="${id}"]`),p=prod(id);if(el&&p)el.outerHTML=row(p);sums()};
+  const redraw=ref=>{const id=ref.split(":")[0],el=sh.querySelector(`[data-row="${id}"]`),p=prod(id);if(el&&p)el.outerHTML=row(p);sums()};
+  // a line taken down to 0 goes away when the product has other lines
+  const drop=ref=>{const [id,k]=ref.split(":"),x=sel[id];if(x.ls.length>1)x.ls.splice(+k||0,1);if(picked&&!qtyOf(id))drawList();else redraw(id)};
   if(usual().length)cat=USUAL;
   drawList();
   // picking a customer jumps to what he usually takes
   $("#oc").addEventListener("change",()=>{if(!picked&&!q&&(cat==="الكل"||cat===USUAL)){cat=usual().length?USUAL:"الكل"}drawList()});
   sh.addEventListener("click",e=>{const t=e.target;const p=t.closest("[data-p]"),m=t.closest("[data-m]"),u=t.closest("[data-u]"),c=t.closest("[data-cat]"),
       k=t.closest("#pco [data-co]"),pk=t.closest("[data-picked]"),z=t.closest("[data-zoom]"),x=t.closest("[data-xr]");
-    if(p){const id=p.dataset.p;sel[id]=sel[id]||{n:0,u:"ق",color:"",note:"",per:S.carton[id]||0};sel[id].n++;redraw(id)}
-    const cl=t.closest("[data-col]");if(cl){const [id,c]=cl.dataset.col.split("|");sel[id].color=sel[id].color===c?"":c;redraw(id)}
-    if(m){const id=m.dataset.m;sel[id].n=Math.max(0,sel[id].n-1);if(picked&&!sel[id].n)drawList();else redraw(id)}
-    if(u){const [id,un]=u.dataset.u.split("|");sel[id].u=un;redraw(id)}
+    if(p){const ref=p.dataset.p;if(ref.includes(":"))L(ref).n++;else{const x=sel[ref]=sel[ref]||{per:S.carton[ref]||0,ls:[]};if(!qtyOf(ref))x.ls=[newL()];x.ls[0].n++}redraw(ref)}
+    const cl=t.closest("[data-col]");if(cl){const [ref,c]=cl.dataset.col.split("|"),l=L(ref);l.color=l.color===c?"":c;redraw(ref)}
+    const lt=t.closest("[data-lt]");if(lt){const [ref,c]=lt.dataset.lt.split("|"),l=L(ref);l.light=l.light===c?"":c;redraw(ref)}
+    if(m){const ref=m.dataset.m,l=L(ref);l.n=Math.max(0,l.n-1);if(!l.n)drop(ref);else redraw(ref)}
+    if(u){const [ref,un]=u.dataset.u.split("|");L(ref).u=un;redraw(ref)}
+    const lx=t.closest("[data-lx]");if(lx)drop(lx.dataset.lx);
+    const mo=t.closest("[data-more]");if(mo){const id=mo.dataset.more;sel[id].ls.push(newL(1));redraw(id)}
     if(z)lightbox(z.dataset.zoom,false);
     if(c){cat=c.dataset.cat;drawList()}
     if(k){co=k.dataset.co;filt.co=co;cat="الكل";picked=false;q="";$("#pq").value="";drawList()}
     if(pk){picked=!picked;q="";$("#pq").value="";drawList()}
     if(x){extras.splice(+x.dataset.xr,1);drawList()}
     const xa=t.closest("[data-xadd]");if(xa){const e=extras[+xa.dataset.xadd];productSheet(null,{stack:true,name:e.name,onSave:np=>{const i=extras.indexOf(e);if(i>=0)extras.splice(i,1);
-      sel[np.id]={n:e.qty,u:"ق",color:"",note:"",per:S.carton[np.id]||0};drawList()}})}
+      sel[np.id]={per:S.carton[np.id]||0,ls:[newL(e.qty)]};drawList()}})}
     const py=t.closest("[data-pay]");if(py)sh.querySelectorAll("[data-pay]").forEach(b=>b.setAttribute("aria-pressed",b===py))});
 
-  sh.addEventListener("change",e=>{const i=e.target.closest("[data-q]");if(i){const id=i.dataset.q;sel[id].n=Math.max(0,parseInt(i.value)||0);redraw(id)}
+  sh.addEventListener("change",e=>{const i=e.target.closest("[data-q]");if(i){const ref=i.dataset.q,l=L(ref);l.n=Math.max(0,parseInt(norm(i.value))||0);if(!l.n)drop(ref);else redraw(ref)}
     const pe=e.target.closest("[data-per]");if(pe){const id=pe.dataset.per,n=Math.max(0,parseInt(pe.value)||0);sel[id].per=n;if(n)S.carton[id]=n;redraw(id)}});
   // the note is kept as it's typed, without redrawing the row (that would close the keyboard)
-  sh.addEventListener("input",e=>{const nt=e.target.closest("[data-note]");if(nt)sel[nt.dataset.note].note=nt.value});
+  sh.addEventListener("input",e=>{const nt=e.target.closest("[data-note]");if(nt)L(nt.dataset.note).note=nt.value});
   $("#pq").oninput=e=>{q=e.target.value.trim();if(q)picked=false;drawList()};
   const onCat=()=>{if(sh.isConnected)drawList();else document.removeEventListener("catchange",onCat)};document.addEventListener("catchange",onCat);
   if(editing){if(discMode==="amt")$("#odiscA").value=editing.discAmt||"";else $("#odisc").value=editing.disc||""}
@@ -1133,8 +1154,8 @@ function orderEditor(init){
     $("#ocBox").hidden=true;$("#ocName").value="";$("#ocArea").value="";toast(`اتضاف ${n}`)};
   $("#exa").onclick=()=>{const n=$("#exn").value.trim(),k=parseInt($("#exq").value)||1;if(!n)return toast("اكتب اسم المنتج");extras.push({name:n,qty:k,unit:"ق",price:0});$("#exn").value="";$("#exq").value="";drawList()};
   const commit=()=>{const cid=$("#oc").value;if(!cid){toast("اختار العميل الأول");return null}
-    const items=[...lines().map(([pid,x])=>{const p=prod(pid);const it={pid,qty:x.n,unit:x.u,price:p?.price||0,name:p?.name||"منتج"};
-      if(x.color)it.color=x.color;if(x.note.trim())it.note=x.note.trim();if(x.u==="ك")it.per=x.per||0;return it}),...extras];
+    const items=[...flat().map(x=>{const p=prod(x.pid);const it={pid:x.pid,qty:x.n,unit:x.u,price:p?.price||0,name:p?.name||"منتج"};
+      if(x.color)it.color=x.color;if(x.light)it.light=x.light;if(x.note.trim())it.note=x.note.trim();if(x.u==="ك")it.per=x.per||0;return it}),...extras];
     if(!items.length){toast("ضيف منتج واحد على الأقل");return null}
     let o=editing;if(!o){o={id:uid(),no:S.seq++,status:"draft",created:Date.now(),hist:{}};S.orders.push(o)}
     o.customerId=cid;o.items=items;o.note=$("#on").value.trim();
@@ -1157,9 +1178,9 @@ function moneyLines(o){const m=orderMoney(o);if(!m.sub)return[];
   return["",`المجموع: ${fmtM(m.sub)} ج${m.pcs?` (${m.pcs} قطعة)`:""}`,m.disc?`خصم العميل: ${fmtM(m.pct)}% = ${fmtM(m.disc)} ج`:null,`الإجمالي: ${fmtM(m.net)} ج`,
     !m.manual&&m.missing?`(${m.missing} صنف مش متسعّر)`:null].filter(x=>x!==null)}
 function message(o,isEdit){const c=cust(o.customerId);const many=groups(o).length>1;
-  return [`${isEdit?"تعديل على ":""}طلب #${o.no}`,`العميل: ${c.name}${c.owner?` (${c.owner})`:""}`,c.area?`المنطقة: ${c.area}`:null,
+  return [`طلب #${o.no}`,`العميل: ${c.name}${c.owner?` (${c.owner})`:""}`,c.area?`المنطقة: ${c.area}`:null,
     ...groups(o).flatMap(g=>["",...(many?[`${g.k}:`]:[]),...g.items.map(i=>{const p=i.pid&&prod(i.pid);
-      return `• ${itemName(i)}${p&&p.code?` (${p.code})`:""}${i.color?` · ${i.color}`:""} × ${i.qty} ${unitName(i)}${i.unit==="ك"&&i.per?` (${i.per} قطعة)`:""}${i.note?`\n   ملحوظة: ${i.note}`:""}`})]),
+      return `• ${itemName(i)}${p&&p.code?` (${p.code})`:""}${itemTags(i)?` · ${itemTags(i)}`:""} × ${i.qty} ${unitName(i)}${i.unit==="ك"&&i.per?` (${i.per} قطعة)`:""}${i.note?`\n   ملحوظة: ${i.note}`:""}`})]),
     ...moneyLines(o),o.pay?`الدفع: ${PAY[o.pay]}`:null,
     o.note?`\nملاحظة: ${o.note}`:null,S.settings.rep?`\nمن: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
 
@@ -1182,7 +1203,7 @@ async function orderImage(o,isEdit){
   ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);
   // header
   R(0,0,W,200,0,"#282825");ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;
-  ctx.fillText(`${isEdit?"تعديل على ":""}طلب رقم ${o.no}`,W-P,62);
+  ctx.fillText(`طلب رقم ${o.no}`,W-P,62);
   ctx.font=`700 32px ${F}`;ctx.fillText(c.name+(c.owner?` (${c.owner})`:""),W-P,120);
   ctx.font=`600 24px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText([c.area,fmtDay(o.created)].filter(Boolean).join(" · "),W-P,166);
   ctx.textAlign="left";ctx.fillStyle="#E07A4F";ctx.font=`800 30px ${F}`;ctx.fillText(`${o.items.length} صنف`,P,62);
@@ -1204,9 +1225,9 @@ async function orderImage(o,isEdit){
       const nx=tx-24,nw=nx-(P+230);ctx.textAlign="right";ctx.fillStyle="#282825";ctx.font=`700 31px ${F}`;
       const nl=wrap(ctx,itemName(i),nw).slice(0,2);const lt=lineTotal(i);const sub=[p&&p.code,lt?`${fmtM(lt)} ج`:null].filter(Boolean).join(" · ");
       ctx.font=`600 24px ${F}`;const notel=i.note?wrap(ctx,"ملحوظة: "+i.note,nw).slice(0,2):[];ctx.font=`700 31px ${F}`;
-      const blockH=nl.length*42+(i.color?40:0)+(sub?34:0)+notel.length*32;let ly=y+RH/2-blockH/2+21;
+      const tags=itemTags(i);const blockH=nl.length*42+(tags?40:0)+(sub?34:0)+notel.length*32;let ly=y+RH/2-blockH/2+21;
       nl.forEach(l=>{ctx.fillText(l,nx,ly);ly+=42});
-      if(i.color){ctx.font=`800 28px ${F}`;ctx.fillStyle="#BD572F";ctx.fillText(`اللون: ${i.color}`,nx,ly);ly+=40}
+      if(tags){ctx.font=`800 28px ${F}`;ctx.fillStyle="#BD572F";ctx.fillText(tags,nx,ly);ly+=40}
       if(sub){ctx.font=`600 23px ${F}`;ctx.fillStyle="#6F6A60";ctx.fillText(sub,nx,ly-4);ly+=34}
       if(notel.length){ctx.font=`600 24px ${F}`;ctx.fillStyle="#282825";notel.forEach(l=>{ctx.fillText(l,nx,ly-4);ly+=32})}
       y+=RH+12}}
@@ -1247,7 +1268,7 @@ function sendSheet(id,isEdit){const o=S.orders.find(x=>x.id===id);const txt=mess
 
 function orderSheet(id){const o=S.orders.find(x=>x.id===id);const c=cust(o.customerId);const s=STATUSES[SIDX[o.status]];
   const sh=sheet(`طلب #${o.no}`,`<div class="card"><div class="hd"><span class="main"><b>${esc(c.name)}</b><br><span style="color:var(--muted);font-size:13px">${esc(c.owner)} · ${esc(when(o.created))}</span></span><span class="pill st-${o.status}">${s.t}</span></div>
-    <ul class="items" style="color:var(--fg)">${o.items.map(i=>`<li><span>${esc(itemName(i))}${i.color?` · <b>${esc(i.color)}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">× ${i.qty}</span> ${unitName(i)}</span></li>`).join("")}</ul>
+    <ul class="items" style="color:var(--fg)">${o.items.map(i=>`<li><span>${esc(itemName(i))}${itemTags(i)?` · <b>${esc(itemTags(i))}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">× ${i.qty}</span> ${unitName(i)}</span></li>`).join("")}</ul>
     ${o.note?`<div class="hint">ملاحظة: ${esc(o.note)}</div>`:""}${(()=>{const m=orderMoney(o);return m.sub?`<div class="total"><span>المجموع</span><span>${money(m.sub)} ج</span></div>${m.disc?`<div class="total"><span>خصم ${fmtM(m.pct)}%</span><span>− ${money(m.disc)} ج</span></div>`:""}<div class="total"><span>الإجمالي</span><span>${money(m.net)} ج</span></div>`:""})()}
     <div class="inrow" style="align-items:center"><span class="hint" style="flex:none">الدفع</span><div class="seg" id="opay2">${[["cash","كاش"],["credit","آجل"],["","بعدين"]].map(([k,t])=>`<button data-pay="${k}" aria-pressed="${(o.pay||"")===k}">${t}</button>`).join("")}</div></div></div>
     <section class="sec"><h2>المراحل</h2><div class="list">${STATUSES.map((x,i)=>{const t=i===0?o.created:o.hist[x.k];return `<div class="row"><span class="dot ${i<=SIDX[o.status]?"ok":""}" style="${i<=SIDX[o.status]?"":"background:var(--line)"}"></span><span class="main">${x.t}</span><span class="s">${t?esc(when(t)):""}</span></div>`}).join("")}</div></section>`,
