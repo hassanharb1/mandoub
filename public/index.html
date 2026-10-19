@@ -229,6 +229,12 @@ textarea.note{min-height:150px;font-size:16px;line-height:1.9}
 .pcard .b{padding:8px 10px 10px;display:flex;flex-direction:column;gap:2px;flex:1}
 .pcard .t{font-weight:700;font-size:14px;line-height:1.4}
 .pcard .pr{font-weight:800;color:var(--accent)}
+.scrim.top{z-index:60}
+.pedit{display:flex;gap:12px;align-items:center}
+.pedit .im{width:110px;height:110px;flex:none;border-radius:14px;overflow:hidden;background:#fff;border:1px solid var(--line)}
+.pedit .im img{width:100%;height:100%;object-fit:contain}.pedit .im .ph{width:100%;height:100%;display:grid;place-items:center;color:#9a948a;font-size:12px;text-align:center}
+.pbtns{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.ptag{align-self:flex-start;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:0 8px;margin-top:2px}
 .lightbox{position:fixed;inset:0;z-index:90;background:rgba(20,20,18,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px}
 .lightbox .im{width:min(100%,420px);aspect-ratio:1;background:#fff;border-radius:16px;overflow:hidden}
 .lightbox .im img{width:100%;height:100%;object-fit:contain}
@@ -324,7 +330,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=27; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=28; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -341,9 +347,17 @@ function save(){mem=S;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
 const uid=()=>Math.random().toString(36).slice(2,9);
 
 /* ---------- catalog (catalog.js) ---------- */
-const CAT=self.CATALOG||{companies:[],products:[]};
-const PMAP=Object.fromEntries(CAT.products.map(p=>[p.id,p]));
-const coName=id=>(CAT.companies.find(c=>c.id===id)||{}).name||"";
+// the price list from catalog.js plus the rep's own changes (S.cat): products he added (add), edits and hides of
+// list products (edit[id] holds only what differs), and companies he added (cos)
+const BASE=self.CATALOG||{companies:[],products:[]};
+let CAT=BASE,PMAP={},HIDDEN=[],ALLCOS=BASE.companies;
+function rebuildCat(u){u=u||{};const ed=u.edit||{};
+  const all=[...BASE.products.map(p=>ed[p.id]?{...p,...ed[p.id],edited:true}:p),...(u.add||[]).map(p=>({...p,mine:true}))];
+  PMAP=Object.fromEntries(all.map(p=>[p.id,p]));const vis=all.filter(p=>!p.hide);HIDDEN=all.filter(p=>p.hide);
+  ALLCOS=[...BASE.companies,...(u.cos||[])];
+  CAT={...BASE,companies:ALLCOS.filter(c=>BASE.companies.includes(c)||vis.some(p=>p.co===c.id)),products:vis}}
+rebuildCat();
+const coName=id=>(ALLCOS.find(c=>c.id===id)||{}).name||"";
 // catalog first; S.products only holds products from older versions of the app
 function prod(id){return PMAP[id]||(S&&S.products||[]).find(p=>p.id===id)}
 
@@ -397,7 +411,7 @@ function seed(){
 let S=load();
 // old demo data used placeholder products (p1…p16): swap it for the new demo, keeping the settings. Real data is never touched.
 if(S&&S.demo&&(S.products||[]).some(p=>p.id==="p1")){const keep={...S.settings};S=seed();S.settings=keep}
-S=S||seed();if(!S.since)S.since=Date.now();if(!S.carton)S.carton={};if(!S.products)S.products=[];if(!S.adjusts)S.adjusts=[];save();
+S=S||seed();if(!S.since)S.since=Date.now();if(!S.carton)S.carton={};if(!S.products)S.products=[];if(!S.adjusts)S.adjusts=[];save();rebuildCat(S.cat);
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persisted().then(p=>{if(!p)navigator.storage.persist()}).catch(()=>{})}catch(e){}
 
 /* ---------- helpers ---------- */
@@ -467,13 +481,14 @@ function alerts(){
 /* ---------- toast & sheet ---------- */
 let tt;function toast(m){let el=$(".toast");if(!el){el=document.createElement("div");el.className="toast";el.setAttribute("role","status");document.body.appendChild(el)}
   el.textContent=m;el.hidden=false;clearTimeout(tt);tt=setTimeout(()=>el.hidden=true,2200)}
-function sheet(title,body,foot,opts){closeSheet();const sc=document.createElement("div");sc.className="scrim";sc.id="scrim";
+// opts.stack opens it over the open sheet (e.g. a new product from inside an order); closeSheet closes the top one
+function sheet(title,body,foot,opts){const stack=opts&&opts.stack&&$("#scrim");if(!stack)closeSheet();const sc=document.createElement("div");sc.className="scrim"+(stack?" top":"");sc.id=stack?"scrim2":"scrim";
   sc.innerHTML=`<div class="sheet ${opts&&opts.full?"full":""}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sh"><h3>${esc(title)}</h3>
   <button class="iconbtn" data-close aria-label="قفل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <div class="sb">${body}</div>${foot?`<div class="sf">${foot}</div>`:""}</div>`;
   sc.addEventListener("click",e=>{if(e.target===sc||e.target.closest("[data-close]"))closeSheet()});
   document.body.appendChild(sc);return sc.querySelector(".sheet")}
-function closeSheet(){stopMic();const s=$("#scrim");if(s)s.remove()}
+function closeSheet(){stopMic();const s=$("#scrim2")||$("#scrim");if(s)s.remove()}
 
 /* ---------- voice dictation ---------- */
 const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -811,12 +826,79 @@ function requestSheet(id){const r=S.requests.find(x=>x.id===id);const c=cust(r.c
 /* ---------- catalog browsing ---------- */
 filt.co=CAT.companies[0]?.id||"";filt.pcat="الكل";filt.pq="";
 // photos live in catalog-img.js, loaded after the app opens; until then a placeholder holds the spot
-const photo=p=>p&&p.img&&self.CATIMG?self.CATIMG[p.img]:null;
+// the rep's own photos ("u:key") live in IndexedDB and are read into UIMG when the app opens
+const UIMG={};
+const imgSrc=k=>!k?null:k.startsWith("u:")?UIMG[k.slice(2)]||null:self.CATIMG?self.CATIMG[k]||null:null;
+const photo=p=>p&&imgSrc(p.img);
 const imgHTML=p=>{const src=photo(p);return src?`<img src="${src}" alt="" decoding="async">`:p&&p.img?`<span class="ph" data-ph="${esc(p.img)}">…</span>`:`<span class="ph">مفيش صورة</span>`};
-function loadPhotos(){const sc=document.createElement("script");sc.src="catalog-img.js";
-  sc.onload=()=>document.querySelectorAll("[data-ph]").forEach(el=>{const src=self.CATIMG&&self.CATIMG[el.dataset.ph];if(src)el.outerHTML=`<img src="${src}" alt="" decoding="async">`});
-  document.body.appendChild(sc)}
-const priceTxt=p=>`${money(p.price)} ج للقطعة`;
+const fillPhotos=()=>document.querySelectorAll("[data-ph]").forEach(el=>{const src=imgSrc(el.dataset.ph);if(src)el.outerHTML=`<img src="${src}" alt="" decoding="async">`});
+function loadPhotos(){const sc=document.createElement("script");sc.src="catalog-img.js";sc.onload=fillPhotos;document.body.appendChild(sc);
+  imgAll().then(o=>{Object.assign(UIMG,o);fillPhotos()}).catch(()=>{})}
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("mandoub-img",1);r.onupgradeneeded=()=>r.result.createObjectStore("img");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function imgPut(k,v){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction("img","readwrite"),st=t.objectStore("img");
+  if(v==null)st.delete(k);else st.put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+async function imgAll(){const db=await idb();return new Promise((res,rej)=>{const out={},c=db.transaction("img").objectStore("img").openCursor();
+  c.onsuccess=()=>{const x=c.result;if(x){out[x.key]=x.value;x.continue()}else res(out)};c.onerror=()=>rej(c.error)})}
+const myImgKeys=()=>Object.values(PMAP).map(p=>p.img).filter(k=>k&&k.startsWith("u:")&&UIMG[k.slice(2)]).map(k=>k.slice(2));
+function dropImg(k){if(k&&k.startsWith("u:")){delete UIMG[k.slice(2)];imgPut(k.slice(2),null).catch(()=>{})}}
+// a photo from the camera or gallery, made small like the price-list photos (~360px)
+async function shrinkPhoto(file){const url=URL.createObjectURL(file);try{const im=await loadImg(url);if(!im)throw 0;const s=Math.min(1,360/Math.max(im.width,im.height));
+  const cv=document.createElement("canvas");cv.width=Math.round(im.width*s);cv.height=Math.round(im.height*s);const c=cv.getContext("2d");
+  c.fillStyle="#fff";c.fillRect(0,0,cv.width,cv.height);c.drawImage(im,0,0,cv.width,cv.height);
+  let d=cv.toDataURL("image/webp",.8);if(!d.startsWith("data:image/webp"))d=cv.toDataURL("image/jpeg",.82);return d}finally{URL.revokeObjectURL(url)}}
+
+/* add or edit a product: photo, name, company (or a new one), category, price, code, pieces per carton.
+   A list product keeps only what changed and can be hidden or put back as it was; the rep's own can be deleted. */
+function productSheet(pid,opts){opts=opts||{};const p=pid?PMAP[pid]:null,base=p&&!p.mine?BASE.products.find(x=>x.id===pid):null;
+  let img=p?p.img||"":"",pic=null,co=p?p.co:(CAT.companies.some(c=>c.id===filt.co)?filt.co:CAT.companies[0]?.id);
+  const catsOf2=c=>[...new Set(Object.values(PMAP).filter(x=>x.co===c).map(x=>x.cat).filter(Boolean))];
+  const sh=sheet(p?"تعديل منتج":"منتج جديد",`<div class="pedit"><div class="im" id="peim">${p&&photo(p)?imgHTML(p):`<span class="ph">مفيش صورة</span>`}</div>
+      <div class="pbtns"><label class="btn ghost sm" style="cursor:pointer">📷 ${p&&p.img?"غيّر الصورة":"ضيف صورة"}<input type="file" id="pef" accept="image/*" hidden></label>
+      <button type="button" class="link" id="pex" ${img?"":"hidden"}>شيل الصورة</button></div></div>
+    <label class="f">اسم المنتج<input class="inp" id="pen" value="${esc(p?p.name:opts.name||"")}" placeholder="مثلًا: كشاف 100 وات ابيض"></label>
+    <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:700;color:var(--muted)">الشركة
+      <div class="chips" id="peco">${ALLCOS.map(c=>`<button type="button" class="chip" data-pco="${c.id}" aria-pressed="${c.id===co}">${esc(c.name)}</button>`).join("")}<button type="button" class="chip" data-pco="new" aria-pressed="false">+ شركة جديدة</button></div>
+      <input class="inp" id="penco" placeholder="اسم الشركة الجديدة" hidden></div>
+    <label class="f">القسم<input class="inp" id="pec" list="pecl" value="${esc(p?p.cat:"")}" placeholder="كشافات، لمبات، بلاكات…" autocomplete="off"><datalist id="pecl"></datalist></label>
+    <div class="inrow"><label class="f">السعر للقطعة<input class="inp num" id="pep" type="number" inputmode="decimal" value="${p&&p.price?p.price:""}" placeholder="0" style="text-align:right;direction:rtl"></label>
+      <label class="f">الكود (اختياري)<input class="inp" id="pecode" value="${esc(p?p.code||"":"")}" style="direction:ltr;text-align:right"></label></div>
+    ${base?`<p class="hint">في ليستة الشركة: ${esc(base.name)} · ${money(base.price)} ج</p>`:""}
+    <label class="f">الكرتونة فيها كام قطعة (اختياري)<input class="inp num" id="pecar" type="number" inputmode="numeric" value="${pid&&S.carton[pid]||""}" style="text-align:right;direction:rtl"></label>`,
+    `<button class="btn primary block" id="pesv">${p?"احفظ":"ضيف المنتج"}</button>
+     ${p?`<div class="btns">${p.mine?`<button class="btn ghost" id="pedl">امسح المنتج ده</button>`:`<button class="btn ghost" id="pehd">اخفيه من القايمة</button>${p.edited?`<button class="btn ghost" id="pert">رجّعه زي الأصل</button>`:""}`}</div>`:""}`,{stack:opts.stack});
+  const cats=()=>{$("#pecl").innerHTML=(co&&co!=="new"?catsOf2(co):[]).map(c=>`<option value="${esc(c)}">`).join("")};cats();
+  sh.querySelector("#peco").onclick=e=>{const b=e.target.closest("[data-pco]");if(!b)return;co=b.dataset.pco;
+    sh.querySelectorAll("[data-pco]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#penco").hidden=co!=="new";if(co==="new")$("#penco").focus();cats()};
+  const show=()=>{const src=pic||imgSrc(img);$("#peim").innerHTML=src?`<img src="${src}" alt="">`:`<span class="ph">مفيش صورة</span>`;$("#pex").hidden=!src};
+  sh.querySelector("#pef").onchange=async e=>{const f=e.target.files[0];if(!f)return;$("#peim").innerHTML=`<span class="ph">بجهز الصورة…</span>`;
+    try{pic=await shrinkPhoto(f)}catch(err){toast("مقدرتش أفتح الصورة دي")}show()};
+  sh.querySelector("#pex").onclick=()=>{pic=null;img="";show()};
+  const done=(msg,id)=>{save();rebuildCat(S.cat);closeSheet();toast(msg);document.dispatchEvent(new CustomEvent("catchange"));render();if(id&&opts.onSave&&PMAP[id])opts.onSave(PMAP[id])};
+  sh.querySelector("#pesv").onclick=async()=>{const name=$("#pen").value.trim();if(!name)return toast("اكتب اسم المنتج");
+    S.cat=S.cat||{};let c=co;
+    if(c==="new"){const n=$("#penco").value.trim();if(!n)return toast("اكتب اسم الشركة");
+      const ex=ALLCOS.find(x=>norm(x.name)===norm(n));if(ex)c=ex.id;else{c="c_"+uid();(S.cat.cos=S.cat.cos||[]).push({id:c,name:n})}}
+    if(!c)return toast("اختار الشركة");
+    const old=p?p.img||"":"";
+    if(pic){const k=uid()+Date.now().toString(36);try{await imgPut(k,pic);UIMG[k]=pic;img="u:"+k}catch(err){toast("مقدرتش أحفظ الصورة على الموبايل ده")}}
+    if(old!==img)dropImg(old);
+    const d={name,co:c,cat:$("#pec").value.trim()||"تانية",code:$("#pecode").value.trim(),price:Math.max(0,parseFloat($("#pep").value)||0),img};
+    let id=pid;
+    if(!p){id="u_"+uid();(S.cat.add=S.cat.add||[]).push({id,...d})}
+    else if(p.mine)Object.assign(S.cat.add.find(x=>x.id===pid),d);
+    else{const diff={};["name","co","cat","code","price","img"].forEach(k=>{if(d[k]!==(base[k]??(k==="price"?0:"")))diff[k]=d[k]});
+      S.cat.edit=S.cat.edit||{};if(Object.keys(diff).length)S.cat.edit[pid]=diff;else delete S.cat.edit[pid]}
+    const n=parseInt($("#pecar").value)||0;if(n>0)S.carton[id]=n;else delete S.carton[id];
+    if(!p)filt.co=c;
+    done(p?"اتعدل":`اتضاف «${name}»`,id)};
+  const dl=sh.querySelector("#pedl");if(dl)armDel(dl,()=>{dropImg(p.img);S.cat.add=S.cat.add.filter(x=>x.id!==pid);delete S.carton[pid];done("اتمسح")});
+  const hd=sh.querySelector("#pehd");if(hd)armDel(hd,()=>{S.cat=S.cat||{};S.cat.edit=S.cat.edit||{};S.cat.edit[pid]={...(S.cat.edit[pid]||{}),hide:true};done("اتخفى · ترجّعه من «منتجات مخفية» تحت القايمة")});
+  const rt=sh.querySelector("#pert");if(rt)armDel(rt,()=>{dropImg(S.cat.edit[pid].img);delete S.cat.edit[pid];done("رجع زي الأصل",pid)})}
+function hiddenSheet(){const sh=sheet("منتجات مخفية",`<p class="hint">دي منتجات من ليستة الشركة انت خفيتها. مش بتظهر في الطلب ولا في البحث.</p>
+  <div class="list">${HIDDEN.map(p=>`<div class="row"><span class="main"><span class="t">${esc(p.name)}</span><br><span class="s">${esc(coName(p.co))} · ${esc(p.cat||"")}</span></span><button class="btn ghost sm" data-unh="${p.id}">رجّعه</button></div>`).join("")||`<div class="empty">مفيش منتجات مخفية</div>`}</div>`);
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-unh]");if(!b)return;const id=b.dataset.unh,e2=S.cat.edit[id];delete e2.hide;if(!Object.keys(e2).length)delete S.cat.edit[id];
+    save();rebuildCat(S.cat);render();b.closest(".row").remove();toast("رجع للقايمة")})}
+const priceTxt=p=>p.price?`${money(p.price)} ج للقطعة`:"من غير سعر";
 // colours named in the product name (e.g. "ابيض/اسود") become quick picks on the order line
 const COLORS=["ابيض دهبي","اسود دهبي","ابيض","اسود","ورم","دهبي","فضي","RGB"];
 function colorsOf(p){let n=p.name;const out=[];COLORS.forEach(c=>{if(n.includes(c)){out.push(c);n=n.split(c).join(" ")}});return out.length>1?out:[]}
@@ -831,21 +913,25 @@ const searchBox=(id,ph,val)=>`<div class="search"><svg viewBox="0 0 24 24" fill=
 function lightbox(pid,withOrder){const p=prod(pid);if(!p)return;$(".lightbox")?.remove();
   const el=document.createElement("div");el.className="lightbox";el.setAttribute("role","dialog");el.setAttribute("aria-label",p.name);
   el.innerHTML=`<div class="im">${imgHTML(p)}</div><div class="cap">${esc(p.name)}${p.code?` <span class="code">${esc(p.code)}</span>`:""}<br><span class="s">${esc(coName(p.co))} · ${priceTxt(p)}</span></div>
-    <div class="btns">${withOrder?`<button class="btn primary" id="lbo">ضيفه لطلب</button>`:""}<button class="btn ghost" id="lbx">رجوع</button></div>`;
+    <div class="btns">${withOrder?`<button class="btn primary" id="lbo">ضيفه لطلب</button>`:""}<button class="btn ghost" id="lbe">تعديل</button><button class="btn ghost" id="lbx">رجوع</button></div>`;
   el.addEventListener("click",e=>{if(e.target===el||e.target.closest("#lbx"))el.remove()});
   document.body.appendChild(el);
-  el.querySelector("#lbo")?.addEventListener("click",()=>{el.remove();orderEditor({items:[{pid,qty:1,unit:"ق"}]})})}
+  el.querySelector("#lbo")?.addEventListener("click",()=>{el.remove();orderEditor({items:[{pid,qty:1,unit:"ق"}]})});
+  el.querySelector("#lbe").addEventListener("click",()=>{el.remove();productSheet(pid,{stack:!!$("#scrim")})})}
 
 function vProducts(v){
   setTitle("المنتجات",`${CAT.products.length} منتج من ${CAT.companies.length} شركات`);
-  v.innerHTML=`${coSeg("vco")}${searchBox("vq","دوّر باسم المنتج أو الكود",filt.pq)}<div class="chips" id="vcats"></div><div id="vlist"></div>`;
+  if(!CAT.companies.some(c=>c.id===filt.co))filt.co=CAT.companies[0]?.id||"";
+  v.innerHTML=`${coSeg("vco")}<div class="inrow">${searchBox("vq","دوّر باسم المنتج أو الكود",filt.pq)}<button class="btn primary" id="vadd" style="flex:none">+ منتج</button></div><div class="chips" id="vcats"></div><div id="vlist"></div>
+    ${HIDDEN.length?`<button class="link" id="vhid" style="margin-top:12px">منتجات مخفية (${HIDDEN.length})</button>`:""}`;
+  $("#vadd").onclick=()=>productSheet();const vh=$("#vhid");if(vh)vh.onclick=hiddenSheet;
   const draw=()=>{const q=filt.pq.trim();const co=CAT.companies.find(c=>c.id===filt.co);
     v.querySelectorAll("[data-co]").forEach(b=>b.setAttribute("aria-pressed",!q&&b.dataset.co===filt.co));
     $("#vcats").hidden=!!q;
     $("#vcats").innerHTML=catsOf(filt.co).map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${c===filt.pcat}">${esc(c)}</button>`).join("");
     const list=findProducts(filt.co,filt.pcat,q);
     $("#vlist").innerHTML=(list.length?`<div class="grid">${list.map(p=>`<button class="pcard" data-pz="${p.id}"><div class="im">${imgHTML(p)}</div><div class="b"><span class="t">${esc(p.name)}</span>
-      <span class="s" style="font-size:12.5px;color:var(--muted)">${q?esc(coName(p.co))+" · ":""}${p.code?esc(p.code):esc(p.cat)}</span><span class="pr">${money(p.price)} ج</span></div></button>`).join("")}</div>`
+      <span class="s" style="font-size:12.5px;color:var(--muted)">${q?esc(coName(p.co))+" · ":""}${p.code?esc(p.code):esc(p.cat)}</span><span class="pr">${p.price?money(p.price)+" ج":"—"}</span>${p.mine?`<span class="ptag">مضاف منك</span>`:p.edited?`<span class="ptag">معدّل</span>`:""}</div></button>`).join("")}</div>`
       :`<div class="empty">مفيش منتج بالاسم ده</div>`)+(!q&&co&&co.note?`<p class="hint" style="margin-top:10px">${esc(co.name)}: ${esc(co.note)}</p>`:"")};
   draw();
   v.onclick=e=>{const c=e.target.closest("[data-co]"),k=e.target.closest("[data-cat]"),z=e.target.closest("[data-pz]");
@@ -896,7 +982,7 @@ function orderEditor(init){
   const USUAL="بياخد عادةً";
   const usual=()=>{const cid=$("#oc").value;if(!cid)return[];const n={};
     S.orders.forEach(o=>{if(o.customerId===cid&&o!==editing)new Set(o.items.map(i=>i.pid).filter(Boolean)).forEach(pid=>n[pid]=(n[pid]||0)+1)});
-    return Object.keys(n).sort((a,b)=>n[b]-n[a]).map(prod).filter(p=>p&&PMAP[p.id]).slice(0,12)};
+    return Object.keys(n).sort((a,b)=>n[b]-n[a]).map(prod).filter(p=>p&&PMAP[p.id]&&!p.hide).slice(0,12)};
   const row=p=>{const x=sel[p.id],n=x?x.n:0;
     return `<div class="prod ${n?"sel":""}" data-row="${p.id}"><button class="thumb" data-zoom="${p.id}" aria-label="كبّر الصورة">${imgHTML(p)}</button>
       <div class="main"><div class="t">${esc(p.name)}${p.code?`<span class="code">${esc(p.code)}</span>`:""}</div><div class="s">${q||picked?esc(coName(p.co))+" · ":""}${priceTxt(p)}</div>
@@ -923,7 +1009,7 @@ function orderEditor(init){
     $("#pcats").innerHTML=[...(us.length?[USUAL]:[]),...catsOf(co)].map(c=>`<button class="chip ${c===USUAL?"usual":""}" data-cat="${esc(c)}" aria-pressed="${c===cat}">${c===USUAL?"★ ":""}${esc(c)}</button>`).join("");
     const list=picked?lines().map(([id])=>prod(id)).filter(Boolean):cat===USUAL&&!q?us:findProducts(co,cat,q);
     $("#plist").innerHTML=list.map(row).join("")||`<div class="empty">${picked?"لسه ما اخترتش حاجة":"مفيش منتج بالاسم ده"}</div>`;
-    $("#exl").innerHTML=extras.map((e,i)=>`<div class="row"><span class="main t">${esc(e.name)}</span><span class="num">× ${e.qty}</span><button class="link" data-xr="${i}">شيل</button></div>`).join("");
+    $("#exl").innerHTML=extras.map((e,i)=>`<div class="row"><span class="main t">${esc(e.name)}</span><span class="num">× ${e.qty}</span><button class="link" data-xadd="${i}">ضيفه للقايمة</button><button class="link" data-xr="${i}">شيل</button></div>`).join("");
     sums()};
   // redraw only the touched row so the list doesn't jump while tapping
   const redraw=id=>{const el=sh.querySelector(`[data-row="${id}"]`),p=prod(id);if(el&&p)el.outerHTML=row(p);sums()};
@@ -942,6 +1028,8 @@ function orderEditor(init){
     if(k){co=k.dataset.co;filt.co=co;cat="الكل";picked=false;q="";$("#pq").value="";drawList()}
     if(pk){picked=!picked;q="";$("#pq").value="";drawList()}
     if(x){extras.splice(+x.dataset.xr,1);drawList()}
+    const xa=t.closest("[data-xadd]");if(xa){const e=extras[+xa.dataset.xadd];productSheet(null,{stack:true,name:e.name,onSave:np=>{const i=extras.indexOf(e);if(i>=0)extras.splice(i,1);
+      sel[np.id]={n:e.qty,u:"ق",color:"",note:"",per:S.carton[np.id]||0};drawList()}})}
     const py=t.closest("[data-pay]");if(py)sh.querySelectorAll("[data-pay]").forEach(b=>b.setAttribute("aria-pressed",b===py))});
 
   sh.addEventListener("change",e=>{const i=e.target.closest("[data-q]");if(i){const id=i.dataset.q;sel[id].n=Math.max(0,parseInt(i.value)||0);redraw(id)}
@@ -949,6 +1037,7 @@ function orderEditor(init){
   // the note is kept as it's typed, without redrawing the row (that would close the keyboard)
   sh.addEventListener("input",e=>{const nt=e.target.closest("[data-note]");if(nt)sel[nt.dataset.note].note=nt.value});
   $("#pq").oninput=e=>{q=e.target.value.trim();if(q)picked=false;drawList()};
+  const onCat=()=>{if(sh.isConnected)drawList();else document.removeEventListener("catchange",onCat)};document.addEventListener("catchange",onCat);
   if(editing){if(discMode==="amt")$("#odiscA").value=editing.discAmt||"";else $("#odisc").value=editing.disc||""}
   $("#odisc").oninput=()=>{discMode="pct";sums()};$("#odiscA").oninput=()=>{discMode="amt";sums()};
   $("#osubEd").onclick=()=>{const b=$("#osubBox");b.hidden=!b.hidden;if(!b.hidden){$("#osubIn").value=subManual??Math.round(orderMoney(draft()).auto*100)/100;$("#osubIn").focus()}};
@@ -1225,7 +1314,7 @@ function customerSheet(id){const c=id?S.customers.find(x=>x.id===id):{name:"",ow
     if(id)Object.assign(c,d);else{d.id=uid();S.customers.push(d)}save();closeSheet();toast("اتحفظ");if(!id)go("customer",d.id);else render()}}
 
 /* ---------- backup ---------- */
-function backup(outEl){const data=JSON.stringify(S);let ok=false;
+function backup(outEl){const data=JSON.stringify(myImgKeys().length?{...S,_img:Object.fromEntries(myImgKeys().map(k=>[k,UIMG[k]]))}:S);let ok=false;
   try{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type:"application/json"}));a.download=`mandoub-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();ok=true}catch(e){}
   if(outEl)outEl.innerHTML=`<p class="hint">لو الملف ما نزلش، انسخ النص ده واحفظه:</p><textarea class="inp" readonly style="min-height:70px;font-size:11px;direction:ltr">${esc(data)}</textarea>`;
   S.lastBackup=Date.now();save();toast(ok?"النسخة نزلت في التنزيلات":"اتجهزت النسخة")}
@@ -1264,10 +1353,12 @@ function settingsSheet(){const s=S.settings;
     if(v===null){$("#upHint").textContent="مقدرتش أوصل للنت. جرّب تاني وإنت على الداتا أو واي فاي شغال.";ub.textContent="دوّر تاني";return}
     if(v>VERSION){$("#upHint").textContent=`فيه نسخة جديدة v${v} ✓`;ub.textContent="حدّث دلوقتي";ub.dataset.ready=1;ub.className="btn primary block"}
     else{$("#upHint").textContent="عندك آخر نسخة ✓";ub.textContent="دوّر تاني"}};
-  sh.querySelector("#si").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.customers||!d.orders)throw 0;S=d;if(!S.adjusts)S.adjusts=[];save();closeSheet();toast("اترجعت النسخة");go("home")}catch(err){toast("الملف ده مش نسخة من التطبيق")}};r.readAsText(f)};
+  sh.querySelector("#si").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.customers||!d.orders)throw 0;
+    if(d._img){Object.entries(d._img).forEach(([k,v])=>{UIMG[k]=v;imgPut(k,v).catch(()=>{})});delete d._img}
+    S=d;if(!S.adjusts)S.adjusts=[];if(!S.carton)S.carton={};save();rebuildCat(S.cat);closeSheet();toast("اترجعت النسخة");go("home")}catch(err){toast("الملف ده مش نسخة من التطبيق")}};r.readAsText(f)};
   const arm=(btn,fn)=>{btn.onclick=()=>{if(btn.dataset.armed){fn()}else{btn.dataset.armed=1;btn.textContent="متأكد؟ دوس تاني";}}};
-  const clr=sh.querySelector("#sclr");if(clr)arm(clr,()=>{S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:{...S.settings},products:[],carton:S.carton||{},customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save();closeSheet();toast("اتمسحت، ضيف أول عميل");go("customers")});
-  arm(sh.querySelector("#sdemo"),()=>{const keep={...S.settings};S=seed();S.settings=keep;save();closeSheet();toast("رجعت البيانات التجريبية");go("home")});
+  const clr=sh.querySelector("#sclr");if(clr)arm(clr,()=>{S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:{...S.settings},products:[],carton:S.carton||{},cat:S.cat,customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save();closeSheet();toast("اتمسحت، ضيف أول عميل");go("customers")});
+  arm(sh.querySelector("#sdemo"),()=>{const keep={...S.settings};const cat=S.cat;S=seed();S.settings=keep;if(cat)S.cat=cat;save();closeSheet();toast("رجعت البيانات التجريبية");go("home")});
 }
 
 /* ---------- notifications ----------
