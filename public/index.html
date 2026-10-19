@@ -194,6 +194,10 @@ textarea.inp{min-height:84px;resize:vertical}
 .money .lbl{flex:none;font-size:13.5px;font-weight:700;color:var(--muted)}
 .money .net{font-size:18px;color:var(--accent)}
 .money #odisc,.money #odiscA{padding:8px}
+.licgate{position:fixed;inset:0;z-index:90;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.licgate .card{width:100%;max-width:400px;display:flex;flex-direction:column;gap:12px;padding:22px}
+.licgate h2{margin:0;font-size:22px}.licgate p{margin:0}
+.licgate .brandmark{font-weight:800;font-size:15px;color:var(--accent)}.licgate .brandmark small{margin-inline-start:8px;color:var(--muted);font-size:12px}
 .upbar{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:85;background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:10px 16px;font-weight:800;font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,.2);max-width:92%}
 textarea.note{min-height:150px;font-size:16px;line-height:1.9}
 .nrow .main{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.nrow .main>br{display:none}
@@ -320,7 +324,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=26; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=27; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -516,7 +520,7 @@ function vHome(v){
   const shown=filt.homeAll?al:al.slice(0,3),recent=S.orders.slice().sort((a,b)=>b.created-a.created).slice(0,4);const today=sod(Date.now());
   const colToday=S.payments.filter(p=>p.date>=colFrom()).reduce((a,p)=>a+p.amount,0);
   const ordToday=S.orders.filter(o=>o.created>=today).length;
-  v.innerHTML=`${demoBar()}${backupBar()}
+  v.innerHTML=`${demoBar()}${trialBar()}${backupBar()}
   <div class="hero">
     <div><div class="lbl">الفلوس اللي معاك</div><div class="big">${money(cashInHand())}<span class="cur">ج</span></div></div>
     <div><div class="lbl">برة عند العملاء</div><div class="big">${money(S.customers.reduce((a,c)=>a+Math.max(0,balance(c.id)),0))}<span class="cur">ج</span></div></div>
@@ -1243,6 +1247,8 @@ function settingsSheet(){const s=S.settings;
     <div class="btns"><button class="btn ghost" id="sx">نسخة احتياطية</button><label class="btn ghost" style="cursor:pointer">استرجاع نسخة<input type="file" id="si" accept="application/json" hidden></label></div>
     <div id="sxout"></div>
     ${S.demo?`<button class="btn dark block" id="sclr">امسح البيانات التجريبية وابدأ بعملائي</button>`:""}<button class="btn ghost block" id="sdemo">رجّع البيانات التجريبية</button></section>
+    ${TRIAL&&licGet()?(l=>`<section class="sec"><h2>نسخة التجربة</h2><div class="card"><div class="total"><span>الكود</span><span class="num" style="direction:ltr">${esc(l.code)}</span></div>
+      <div class="hint">لحد يوم ${esc(fmtDay(l.until))} · آخر تأكيد ${esc(when(l.okAt))}</div></div></section>`)(licGet()):""}
     <section class="sec"><h2>تحديث البرنامج</h2>
     <div class="card"><div class="total"><span>النسخة اللي عندك</span><span class="num">v${VERSION}</span></div><div class="hint" id="upHint">دوس علشان تشوف فيه نسخة أحدث ولا لأ. بياناتك مش بتتأثر بالتحديث.</div>
     <button class="btn dark block" id="upBtn">دوّر على تحديث</button></div></section>
@@ -1308,10 +1314,58 @@ setTimeout(async()=>{const v=await latestVersion();if(v&&v>VERSION)upBar("فيه
 // a slow line opened the saved copy and the fresh one arrived afterwards: one tap shows it (no cache clearing needed)
 navigator.serviceWorker?.addEventListener("message",e=>{if(e.data&&e.data.type==="fresh")latestVersion().then(v=>{if(v&&v>VERSION)upBar("النسخة الجديدة نزلت · دوس علشان تفتحها",()=>location.reload())})});
 
+/* ---------- trial licence ----------
+   Only on the trial site (a hostname with "trial"): each rep types an activation code. licenses.json on the server
+   keeps a hash of each code with its last day; Hassan stops («off») or extends («until») a code there and redeploys.
+   The app asks the server on every open with internet; past the last day, or 3 days without asking, it locks.
+   Locking never touches the data, and a backup can still be downloaded from the lock screen. */
+const TRIAL=/trial/i.test(location.hostname)||(()=>{try{return localStorage.getItem("mandoub.forceTrial")==="1"}catch(e){return false}})();
+const LKEY="mandoub.lic",OFFLINE_DAYS=3;
+const licGet=()=>{try{return JSON.parse(localStorage.getItem(LKEY))||null}catch(e){return null}};
+const licSet=l=>{try{localStorage.setItem(LKEY,JSON.stringify(l))}catch(e){}};
+const codeNorm=c=>norm(c).replace(/[^a-z0-9]/g,"").toUpperCase();
+async function sha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+// null when the server can't be reached; otherwise {ok, why, name, until}
+async function licAsk(code){let list;try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),7000);
+    const r=await fetch("licenses.json?check="+Date.now(),{cache:"no-store",signal:ctl.signal});if(!r.ok)return null;list=(await r.json()).codes||[]}catch(e){return null}
+  const h=await sha("mandoub|"+codeNorm(code)),e=list.find(x=>x.h===h);
+  if(!e)return {ok:false,why:"wrong"};const [y,m,d]=String(e.until).split("-").map(Number),until=new Date(y,m-1,d,23,59,59).getTime();
+  if(e.off)return {ok:false,why:"off",name:e.name,until};if(Date.now()>until)return {ok:false,why:"ended",name:e.name,until};
+  return {ok:true,name:e.name,until}}
+function licState(){const l=licGet();if(!l)return "none";if(l.lock)return l.lock;
+  if(Date.now()>l.until)return "ended";if(Date.now()-l.okAt>OFFLINE_DAYS*DAY)return "offline";return "ok"}
+let licAt=0;
+async function licCheck(){const l=licGet();if(!l)return licGate();licAt=Date.now();const a=await licAsk(l.code);
+  if(a)licSet(a.ok?{...l,name:a.name,until:a.until,okAt:Date.now(),lock:null}:{...l,lock:a.why==="ended"?"ended":"off",until:a.until||l.until});licGate()}
+function licGate(){const st=licState();let g=$("#licGate");if(st==="ok"){if(g)g.remove();return}
+  if(!g){g=document.createElement("div");g.id="licGate";g.className="licgate";g.setAttribute("role","dialog");g.setAttribute("aria-modal","true");document.body.appendChild(g)}
+  const l=licGet()||{},keep=`<p class="hint">بياناتك محفوظة على الموبايل ومش هتتمسح.</p>`;
+  const askCode=`<label class="f">كود التفعيل<input class="inp" id="lcode" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" style="direction:ltr;text-align:center;letter-spacing:2px;font-weight:800"></label>
+    <button class="btn primary block" id="lgo">فعّل</button><p class="hint" id="lmsg"></p>`;
+  const msg={none:["أهلًا بيك في دفتر المندوب","دي نسخة تجربة. اكتب كود التفعيل اللي وصلك."],
+    ended:["التجربة خلصت",`التجربة كانت لحد يوم ${l.until?fmtDay(l.until):""}. كلّم اللي بعتلك البرنامج علشان تكمّل.`],
+    off:["الكود ده اتوقف","كلّم اللي بعتلك البرنامج علشان يرجّعه، أو اكتب كود جديد."],
+    offline:["افتح النت مرة","البرنامج محتاج يتأكد من الكود مرة كل 3 أيام. افتح الداتا أو الواي فاي ودوس «جرّب تاني»."]}[st];
+  g.innerHTML=`<div class="card"><div class="brandmark">دفتر المندوب<small>MESTK</small></div><h2>${msg[0]}</h2><p>${esc(msg[1])}</p>
+    ${st==="none"?askCode:`<button class="btn primary block" id="lre">جرّب تاني</button>${keep}
+      <div class="btns"><button class="btn ghost" id="lbk">نزّل نسخة من بياناتك</button><button class="btn ghost" id="lnew">كود تاني</button></div><div id="lnewBox" hidden>${askCode}</div>`}</div>`;
+  const go=g.querySelector("#lgo");if(go)go.onclick=async()=>{const c=$("#lcode").value;if(codeNorm(c).length<4)return $("#lmsg").textContent="اكتب الكود";
+    go.disabled=true;go.textContent="بتأكد…";const a=await licAsk(c);go.disabled=false;go.textContent="فعّل";
+    if(!a)return $("#lmsg").textContent="مقدرتش أوصل للنت. افتح الداتا وجرّب تاني.";
+    if(!a.ok)return $("#lmsg").textContent={wrong:"الكود ده غلط، راجعه تاني",off:"الكود ده متوقف",ended:"الكود ده خلص"}[a.why];
+    licSet({code:codeNorm(c),name:a.name,until:a.until,okAt:Date.now(),lock:null});licAt=Date.now();licGate();toast(`اتفعّل ✓ التجربة لحد يوم ${fmtDay(a.until)}`);render()};
+  const re=g.querySelector("#lre");if(re)re.onclick=async()=>{re.disabled=true;re.textContent="بتأكد…";await licCheck();
+    if($("#licGate")){const b=$("#lre");if(b){b.disabled=false;b.textContent="جرّب تاني"}toast(licState()==="offline"?"لسه مفيش نت":"لسه متوقف")}};
+  g.querySelector("#lbk")?.addEventListener("click",()=>backup());
+  g.querySelector("#lnew")?.addEventListener("click",()=>{$("#lnewBox").hidden=false;$("#lcode").focus()})}
+function trialBar(){if(!TRIAL)return"";const l=licGet();if(!l||!l.until)return"";const left=Math.ceil((l.until-Date.now())/DAY);
+  return left<=2&&left>0?`<div class="demo">التجربة هتخلص يوم ${esc(fmtDay(l.until))}</div>`:""}
+
 /* ---------- boot ---------- */
 render();loadPhotos();setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);
 if("serviceWorker" in navigator&&window.isSecureContext&&window.top===window.self){navigator.serviceWorker.register("sw.js").catch(()=>{})}
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)render()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();if(TRIAL&&Date.now()-licAt>6*36e5)licCheck()}});
+if(TRIAL){licGate();licCheck()}
 })();
 </script>
 

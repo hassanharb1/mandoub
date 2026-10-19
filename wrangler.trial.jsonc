@@ -1,0 +1,10 @@
+{
+  // The trial copy for other reps: same files, its own address (mandoub-trial.<account>.workers.dev).
+  // A hostname with "trial" turns on the activation code; codes live in public/licenses.json.
+  // Deploy: npx wrangler deploy -c wrangler.trial.jsonc
+  "name": "mandoub-trial",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public"
+  }
+}
