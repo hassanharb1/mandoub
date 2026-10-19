@@ -235,6 +235,7 @@ textarea.note{min-height:150px;font-size:16px;line-height:1.9}
 .pedit .im img{width:100%;height:100%;object-fit:contain}.pedit .im .ph{width:100%;height:100%;display:grid;place-items:center;color:#9a948a;font-size:12px;text-align:center}
 .pbtns{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 .ptag{align-self:flex-start;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:0 8px;margin-top:2px}
+.bcbar{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden;margin-top:8px}.bcbar i{display:block;height:100%;background:#1FA855;border-radius:99px}
 .lightbox{position:fixed;inset:0;z-index:90;background:rgba(20,20,18,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px}
 .lightbox .im{width:min(100%,420px);aspect-ratio:1;background:#fff;border-radius:16px;overflow:hidden}
 .lightbox .im img{width:100%;height:100%;object-fit:contain}
@@ -330,7 +331,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=28; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=29; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -557,7 +558,9 @@ function vCustomers(v){
   setTitle("العملاء",`${S.customers.length} عميل`);
   v.innerHTML=`${demoBar()}<div class="inrow"><div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="cq" placeholder="دوّر باسم العميل أو المنطقة" value="${esc(filt.cq)}" autocomplete="off"></div>
-    <button class="btn primary" id="addC" style="flex:none">+ عميل</button></div><div class="list" id="clist"></div>`;
+    <button class="btn primary" id="addC" style="flex:none">+ عميل</button></div>
+    <button class="btn ghost block" id="bcBtn" style="margin-bottom:12px">📣 ${bcLeft()?`كمّل الرسايل (فاضل ${bcLeft()})`:"رسالة واتساب لكذا عميل"}</button><div class="list" id="clist"></div>`;
+  $("#bcBtn").onclick=()=>bcLeft()?bcRun():bcSheet();
   const draw=()=>{const q=filt.cq.trim();const list=S.customers.filter(c=>!q||has(c.name+" "+(c.owner||"")+" "+(c.area||""),q))
       .map(c=>({c,b:balance(c.id),open:S.orders.filter(o=>o.customerId===c.id&&o.status!=="delivered").length,req:S.requests.filter(r=>r.customerId===c.id&&!r.done).length}))
       .sort((a,b)=>b.b-a.b);
@@ -598,13 +601,75 @@ function vCustomer(v){
     <p class="hint">عليه = رصيد أول المدة + اللي زوّدته − التحصيل. لو اتسحب عليه بضاعة أو الرقم مش مطابق للشركة، دوس «ظبط الحساب». دوس على أي حركة علشان تعدلها أو تمسحها.</p></section>
   <section class="sec"><h2>التواصل</h2><div class="card"><div class="t">${c.owner||c.phone?`${c.owner?`<b>${esc(c.owner)}</b>`:""}${c.owner&&c.phone?" · ":""}${c.phone?`<span class="num">${esc(c.phone)}</span>`:""}`:`<span class="hint">لسه مفيش اسم مسؤول ولا تليفون</span>`}</div>
     <div class="call">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone)}">اتصال</a><a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${waNum(c.phone)}">واتساب</a>`:""}
-    <button class="btn ghost sm" id="cEdit">تعديل البيانات</button></div></div></section>
+    <button class="btn ghost sm" id="cEdit">تعديل البيانات</button></div>${c.lastMsg?`<div class="hint" style="margin-top:6px">آخر رسالة واتساب: ${esc(when(c.lastMsg))}</div>`:""}</div></section>
   ${orders.filter(o=>o.status==="delivered").length?`<section class="sec"><h2>طلبات قديمة</h2>${orders.filter(o=>o.status==="delivered").slice(0,5).map(orderCard).join("")}</section>`:""}`;
   bindAlerts(v);bindOrderCards(v);bindReqRows(v);
   $("#cNew").onclick=()=>orderEditor({customerId:c.id});$("#cCol").onclick=()=>collectSheet(c.id);$("#cReq").onclick=()=>quickCapture(c.id);
   $("#cEdit").onclick=()=>customerSheet(c.id);$("#cOpen").onclick=()=>openingSheet(c.id);$("#cAdj").onclick=$("#cBal").onclick=()=>adjustSheet(c.id);bindMoves(v);
   const rp=$("#cRepeat");if(rp)rp.onclick=()=>orderEditor({customerId:c.id,items:orders[0].items.map(i=>({...i}))});
 }
+
+/* one WhatsApp message to many customers: a ready message with each customer's name in it, the rep ticks who
+   gets it, then sends them one after another (WhatsApp opens on each chat with the text typed; he taps send).
+   The queue (S.bcRun) survives closing the app; c.lastMsg remembers when each customer last got one. */
+const BC_MSGS=["السلام عليكم يا {الاسم}، عامل ايه؟ في حاجة ناقصاك محتاجها؟",
+  "صباح الخير يا {الاسم}، أنا معدّي عليكم الأسبوع ده، لو محتاج حاجة قولي أجهزهالك",
+  "يا {الاسم}، فيه بضاعة جديدة نزلت، تحب أبعتلك صورها؟"];
+const bcText=(t,c)=>t.split("{الاسم}").join(c.name);
+const bcPhone=c=>{const n=waNum(norm(c.phone||""));return n.length>=10?n:""};
+const bcLeft=()=>{const r=S.bcRun;return r?r.ids.filter(id=>!r.done.includes(id)&&S.customers.some(c=>c.id===id)).length:0};
+const nCust=n=>n===1?"عميل واحد":n<=10?`${n} عملاء`:`${n} عميل`;
+function bcSheet(){const msgs=[...BC_MSGS,...(S.settings.msgs||[])];let text=S.settings.lastMsg||msgs[0];
+  const lastOrder=cid=>S.orders.filter(o=>o.customerId===cid).reduce((m,o)=>Math.max(m,o.created),0);
+  const areas=[...new Set(S.customers.map(c=>(c.area||"").trim()).filter(Boolean))];
+  const F=[["all","الكل",()=>true],["late","ماطلبوش من أسبوعين",c=>{const t=lastOrder(c.id);return !t||daysSince(t)>=14}],
+    ["quiet","ماكلّمتهمش من أسبوع",c=>!c.lastMsg||daysSince(c.lastMsg)>=7],...areas.map(a=>["a:"+a,a,c=>(c.area||"").trim()===a])];
+  const list=S.customers.slice().sort((a,b)=>a.name.localeCompare(b.name,"ar"));const pick=new Set();
+  const sh=sheet("📣 رسالة لكذا عميل",`<div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:700;color:var(--muted)">الرسالة
+      <div class="chips" id="bcm">${msgs.map((m,i)=>`<button type="button" class="chip" data-bm="${i}" aria-pressed="${m===text}">رسالة ${i+1}</button>`).join("")}</div>
+      <textarea class="inp" id="bct" rows="3">${esc(text)}</textarea>
+      <span class="hint">{الاسم} بيتغيّر لوحده لاسم كل عميل · <button type="button" class="link" id="bcsv">احفظها في الرسايل الجاهزة</button></span>
+      <div class="msg" id="bcpv" style="font-weight:500"></div></div>
+    <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:700;color:var(--muted)">هتتبعت لمين؟
+      <div class="chips" id="bcf">${F.map(([k,t])=>`<button type="button" class="chip" data-bf="${esc(k)}">${esc(t)}</button>`).join("")}<button type="button" class="chip" data-bf="none">شيل الكل</button></div></div>
+    <div class="list" id="bcl">${list.map(c=>{const ph=bcPhone(c);return `<label class="row" style="cursor:${ph?"pointer":"default"};${ph?"":"opacity:.55"}">
+      <input type="checkbox" data-bc="${c.id}" ${ph?"":"disabled"} style="width:22px;height:22px;accent-color:var(--accent);flex:none">
+      <span class="main"><span class="t">${esc(c.name)}</span><br><span class="s">${esc([c.area,ph?(c.lastMsg?"آخر رسالة "+when(c.lastMsg):"لسه ما اتبعتلوش"):"مفيش رقم تليفون"].filter(Boolean).join(" · "))}</span></span></label>`}).join("")}</div>`,
+    `<button class="btn wa block" id="bcgo" disabled>اختار العملاء</button>`);
+  const pv=()=>{text=$("#bct").value;const c=list.find(x=>pick.has(x.id))||list[0];$("#bcpv").textContent=c?bcText(text,c):text};
+  const cnt=()=>{const b=$("#bcgo"),n=pick.size;b.disabled=!n;b.textContent=n?`ابعت لـ ${nCust(n)}`:"اختار العملاء";pv()};
+  const sync=()=>{sh.querySelectorAll("[data-bc]").forEach(x=>x.checked=pick.has(x.dataset.bc));cnt()};
+  sh.querySelector("#bcm").onclick=e=>{const b=e.target.closest("[data-bm]");if(!b)return;$("#bct").value=msgs[+b.dataset.bm];
+    sh.querySelectorAll("[data-bm]").forEach(x=>x.setAttribute("aria-pressed",x===b));pv()};
+  $("#bct").oninput=()=>{sh.querySelectorAll("[data-bm]").forEach(x=>x.setAttribute("aria-pressed",msgs[+x.dataset.bm]===$("#bct").value));pv()};
+  sh.querySelector("#bcsv").onclick=()=>{const t=$("#bct").value.trim();if(!t)return;if(msgs.includes(t))return toast("موجودة في الرسايل الجاهزة");
+    S.settings.msgs=[...(S.settings.msgs||[]),t];save();msgs.push(t);
+    $("#bcm").insertAdjacentHTML("beforeend",`<button type="button" class="chip" data-bm="${msgs.length-1}" aria-pressed="true">رسالة ${msgs.length}</button>`);toast("اتحفظت")};
+  sh.querySelector("#bcf").onclick=e=>{const b=e.target.closest("[data-bf]");if(!b)return;const k=b.dataset.bf;
+    if(k==="none")pick.clear();else{const f=F.find(x=>x[0]===k);list.forEach(c=>{if(bcPhone(c)&&f[2](c))pick.add(c.id)})}sync()};
+  sh.querySelector("#bcl").onchange=e=>{const x=e.target.closest("[data-bc]");if(!x)return;if(x.checked)pick.add(x.dataset.bc);else pick.delete(x.dataset.bc);cnt()};
+  pv();
+  sh.querySelector("#bcgo").onclick=()=>{const t=$("#bct").value.trim();if(!t)return toast("اكتب الرسالة");
+    S.settings.lastMsg=t;S.bcRun={text:t,ids:list.filter(c=>pick.has(c.id)).map(c=>c.id),done:[],sent:[],at:Date.now()};save();bcRun()}}
+function bcRun(){const r=S.bcRun;if(!r)return;
+  const ids=r.ids.filter(id=>S.customers.some(c=>c.id===id)),next=ids.find(id=>!r.done.includes(id)),c=next&&S.customers.find(x=>x.id===next);
+  const left=ids.filter(id=>!r.done.includes(id)).length,sent=ids.filter(id=>(r.sent||[]).includes(id)).length,skipped=ids.length-left-sent;
+  const href=c?`https://wa.me/${bcPhone(c)}?text=${encodeURIComponent(bcText(r.text,c))}`:"";
+  const sh=sheet("📣 الرسايل",`<div class="card"><div class="total"><span>اتبعت</span><span><span class="num">${sent}</span> من <span class="num">${ids.length}</span></span></div>
+      <div class="bcbar"><i style="width:${ids.length?Math.round((ids.length-left)/ids.length*100):0}%"></i></div>${skipped?`<span class="hint">فوّت ${skipped}</span>`:""}</div>
+    ${c?`<div class="card"><span class="hint">اللي عليه الدور</span><div style="font-size:19px;font-weight:800">${esc(c.name)}</div><div class="msg" style="margin-top:8px">${esc(bcText(r.text,c))}</div></div>
+      <p class="hint">دوس «ابعت» هيفتح الواتساب على الشات والرسالة مكتوبة، دوس إرسال وارجع هنا تلاقي اللي بعده.</p>`
+      :`<div class="empty">خلصت ✓ الرسالة اتبعتت لكل اللي اخترتهم</div>`}
+    <div class="list">${ids.map(id=>{const x=S.customers.find(y=>y.id===id);const ok=r.done.includes(id);
+      return `<div class="row"><span class="main t" style="${ok?"color:var(--muted)":""}">${esc(x.name)}</span><span class="pill ${ok&&(r.sent||[]).includes(id)?"ok":"muted"}">${ok?((r.sent||[]).includes(id)?"اتبعت ✓":"فوّته"):id===next?"عليه الدور":"لسه"}</span></div>`}).join("")}</div>`,
+    c?`<a class="btn wa block" id="bcsend" href="${esc(href)}" target="_blank" rel="noopener">ابعت لـ ${esc(c.name)}</a>
+      <div class="btns"><button class="btn ghost" id="bcskip">فوّته</button><button class="btn ghost" id="bcstop">وقّف</button></div>`
+     :`<button class="btn primary block" id="bcend">تمام</button>`);
+  const mark=ok=>{r.done.push(c.id);if(ok){(r.sent=r.sent||[]).push(c.id);c.lastMsg=Date.now()}save();render();bcRun()};
+  sh.querySelector("#bcsend")?.addEventListener("click",()=>setTimeout(()=>mark(true),400));
+  sh.querySelector("#bcskip")?.addEventListener("click",()=>mark(false));
+  sh.querySelector("#bcstop")?.addEventListener("click",()=>{closeSheet();toast(`وقفت · تقدر تكمّل من صفحة العملاء`)});
+  sh.querySelector("#bcend")?.addEventListener("click",()=>{delete S.bcRun;save();closeSheet();render()})}
 
 function orderCard(o){const s=STATUSES[SIDX[o.status]];const c=cust(o.customerId);
   return `<div class="card" data-o="${o.id}"><div class="hd"><span class="main"><b>${esc(c.name)}</b><br><span class="s" style="color:var(--muted);font-size:13px">#<span class="num">${o.no}</span> · ${esc(when(o.created))}</span></span>
