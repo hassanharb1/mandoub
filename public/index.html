@@ -34,13 +34,13 @@
   --ok:var(--success);--ok-soft:var(--successBg);--warn:var(--warning);--warn-soft:var(--warningBg);--bad:var(--error);--bad-soft:var(--errorBg);--info-soft:var(--infoBg)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#1C1C1A; --surface:#282825; --raised:#34342F; --text:#F5F0E7; --muted:#C6BDB0; --border:#8F877A; --divider:#4A4841;
-  --brand:#F29A72; --action:#F29A72; --onAction:#282825;
+  --brand:#E07B52; --action:#BD572F; --onAction:#FFFFFF;
   --success:#94D7AA; --successBg:#22382C; --warning:#F2C46D; --warningBg:#3C311D; --error:#FFB3B3; --errorBg:#43262A; --info:#AACDF2; --infoBg:#243445;
   --brand-soft:#45302A; --wa:#2BB566;
   color-scheme:dark }}
 :root[data-theme="dark"]{
   --bg:#1C1C1A; --surface:#282825; --raised:#34342F; --text:#F5F0E7; --muted:#C6BDB0; --border:#8F877A; --divider:#4A4841;
-  --brand:#F29A72; --action:#F29A72; --onAction:#282825;
+  --brand:#E07B52; --action:#BD572F; --onAction:#FFFFFF;
   --success:#94D7AA; --successBg:#22382C; --warning:#F2C46D; --warningBg:#3C311D; --error:#FFB3B3; --errorBg:#43262A; --info:#AACDF2; --infoBg:#243445;
   --brand-soft:#45302A; --wa:#2BB566;
   color-scheme:dark }
@@ -421,7 +421,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=35; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=36; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
