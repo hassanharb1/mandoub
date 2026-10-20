@@ -1,5 +1,5 @@
-const CACHE="mandoub-v33";
-const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png"];
+const CACHE="mandoub-v34";
+const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png","icon-maskable-192.png","icon-32.png","apple-touch-icon.png","logo-light.svg","logo-dark.svg","logo-stacked-light.svg","logo-stacked-dark.svg","symbol.svg"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL.map(u=>new Request(u,{cache:"reload"})))}).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE&&k!=="mandoub-notify").map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
