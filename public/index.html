@@ -337,7 +337,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=31; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=32; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -947,12 +947,23 @@ function productSheet(pid,opts){opts=opts||{};const p=pid?PMAP[pid]:null,base=p&
       <div class="chips" id="peco">${ALLCOS.map(c=>`<button type="button" class="chip" data-pco="${c.id}" aria-pressed="${c.id===co}">${esc(c.name)}</button>`).join("")}<button type="button" class="chip" data-pco="new" aria-pressed="false">+ شركة جديدة</button></div>
       <input class="inp" id="penco" placeholder="اسم الشركة الجديدة" hidden></div>
     <label class="f">القسم<input class="inp" id="pec" list="pecl" value="${esc(p?p.cat:"")}" placeholder="كشافات، لمبات، بلاكات…" autocomplete="off"><datalist id="pecl"></datalist></label>
+    ${["col","lt"].map(k=>`<div class="f" style="display:flex;flex-direction:column;gap:4px;font-size:13.5px;font-weight:700;color:var(--muted)">${k==="col"?"الألوان المتاحة":"الإضاءة المتاحة"}
+      <span class="hint" style="font-weight:500">${k==="col"?"علّم على الألوان اللي المنتج بييجي بيها":"لو المنتج مفيهوش لمبة سيبها فاضية"}</span>
+      <div class="ochips" id="pe${k}"></div>
+      <div class="inrow" id="pe${k}Box" hidden><input class="inp" id="pe${k}In" placeholder="${k==="col"?"اسم اللون":"نوع الإضاءة"}"><button type="button" class="btn dark" data-pcok="${k}" style="flex:none">ضيف</button></div></div>`).join("")}
     <div class="inrow"><label class="f">السعر للقطعة<input class="inp num" id="pep" type="number" inputmode="decimal" value="${p&&p.price?p.price:""}" placeholder="0" style="text-align:right;direction:rtl"></label>
       <label class="f">الكود (اختياري)<input class="inp" id="pecode" value="${esc(p?p.code||"":"")}" style="direction:ltr;text-align:right"></label></div>
     ${base?`<p class="hint">في ليستة الشركة: ${esc(base.name)} · ${money(base.price)} ج</p>`:""}
     <label class="f">الكرتونة فيها كام قطعة (اختياري)<input class="inp num" id="pecar" type="number" inputmode="numeric" value="${pid&&S.carton[pid]||""}" style="text-align:right;direction:rtl"></label>`,
     `<button class="btn primary block" id="pesv">${p?"احفظ":"ضيف المنتج"}</button>
      ${p?`<div class="btns">${p.mine?`<button class="btn ghost" id="pedl">امسح المنتج ده</button>`:`<button class="btn ghost" id="pehd">اخفيه من القايمة</button>${p.edited?`<button class="btn ghost" id="pert">رجّعه زي الأصل</button>`:""}`}</div>`:""}`,{stack:opts.stack});
+  const opt={col:new Set(p&&p.colors||[]),lt:new Set(p&&p.lights||[])},DEF={col:BODY,lt:LIGHT};
+  const drawOpt=k=>{$("#pe"+k).innerHTML=[...new Set([...DEF[k],...opt[k]])].map(c=>`<button type="button" class="chip" data-pc="${k}|${esc(c)}" aria-pressed="${opt[k].has(c)}">${esc(c)}</button>`).join("")
+    +`<button type="button" class="chip" data-pcadd="${k}">${k==="col"?"+ لون تاني":"+ إضاءة تانية"}</button>`};drawOpt("col");drawOpt("lt");
+  sh.addEventListener("click",e=>{const c=e.target.closest("[data-pc]"),a=e.target.closest("[data-pcadd]"),ok=e.target.closest("[data-pcok]");
+    if(c){const [k,v]=c.dataset.pc.split("|");if(opt[k].has(v))opt[k].delete(v);else opt[k].add(v);drawOpt(k)}
+    if(a){const k=a.dataset.pcadd;$(`#pe${k}Box`).hidden=false;$(`#pe${k}In`).focus()}
+    if(ok){const k=ok.dataset.pcok,v=$(`#pe${k}In`).value.trim();if(!v)return;opt[k].add(v);$(`#pe${k}In`).value="";$(`#pe${k}Box`).hidden=true;drawOpt(k)}});
   const cats=()=>{$("#pecl").innerHTML=(co&&co!=="new"?catsOf2(co):[]).map(c=>`<option value="${esc(c)}">`).join("")};cats();
   sh.querySelector("#peco").onclick=e=>{const b=e.target.closest("[data-pco]");if(!b)return;co=b.dataset.pco;
     sh.querySelectorAll("[data-pco]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#penco").hidden=co!=="new";if(co==="new")$("#penco").focus();cats()};
@@ -970,10 +981,13 @@ function productSheet(pid,opts){opts=opts||{};const p=pid?PMAP[pid]:null,base=p&
     if(pic){const k=uid()+Date.now().toString(36);try{await imgPut(k,pic);UIMG[k]=pic;img="u:"+k}catch(err){toast("مقدرتش أحفظ الصورة على الموبايل ده")}}
     if(old!==img)dropImg(old);
     const d={name,co:c,cat:$("#pec").value.trim()||"تانية",code:$("#pecode").value.trim(),price:Math.max(0,parseFloat($("#pep").value)||0),img};
+    // nothing ticked means "not set": the order then offers the usual colours and lights
+    const set=opt.col.size||opt.lt.size;d.colors=set?[...opt.col]:undefined;d.lights=set?[...opt.lt]:undefined;
     let id=pid;
     if(!p){id="u_"+uid();(S.cat.add=S.cat.add||[]).push({id,...d})}
-    else if(p.mine)Object.assign(S.cat.add.find(x=>x.id===pid),d);
+    else if(p.mine){const x=S.cat.add.find(y=>y.id===pid);Object.assign(x,d);if(!set){delete x.colors;delete x.lights}}
     else{const diff={};["name","co","cat","code","price","img"].forEach(k=>{if(d[k]!==(base[k]??(k==="price"?0:"")))diff[k]=d[k]});
+      if(set){diff.colors=d.colors;diff.lights=d.lights}
       S.cat.edit=S.cat.edit||{};if(Object.keys(diff).length)S.cat.edit[pid]=diff;else delete S.cat.edit[pid]}
     const n=parseInt($("#pecar").value)||0;if(n>0)S.carton[id]=n;else delete S.carton[id];
     if(!p)filt.co=c;
@@ -1075,12 +1089,13 @@ function orderEditor(init){
   const usual=()=>{const cid=$("#oc").value;if(!cid)return[];const n={};
     S.orders.forEach(o=>{if(o.customerId===cid&&o!==editing)new Set(o.items.map(i=>i.pid).filter(Boolean)).forEach(pid=>n[pid]=(n[pid]||0)+1)});
     return Object.keys(n).sort((a,b)=>n[b]-n[a]).map(prod).filter(p=>p&&PMAP[p.id]&&!p.hide).slice(0,12)};
-  const lineHTML=(p,k,l)=>{const ref=`${p.id}:${k}`;
+  const lineHTML=(p,k,l)=>{const ref=`${p.id}:${k}`,own=(p.colors&&p.colors.length)||(p.lights&&p.lights.length);
+    const cols=[...new Set([...(own?p.colors||[]:BODY),...(l.color?[l.color]:[])])],lts=[...new Set([...(own?p.lights||[]:LIGHT),...(l.light?[l.light]:[])])];
     return `<div class="oline"><div class="ctl"><div class="stepper"><button class="add" data-p="${ref}" aria-label="زوّد">+</button><input class="num" data-q="${ref}" value="${l.n}" inputmode="numeric" aria-label="العدد"><button data-m="${ref}" aria-label="أقل">−</button></div>
         <div class="useg" role="group" aria-label="قطعة ولا كرتونة"><button data-u="${ref}|ق" aria-pressed="${l.u==="ق"}" title="قطعة">ق</button><button data-u="${ref}|ك" aria-pressed="${l.u==="ك"}" title="كرتونة">ك</button></div>
         ${k?`<button class="ox" data-lx="${ref}" aria-label="شيل اللون ده">✕</button>`:""}</div>
-      <div class="ochips"><span>اللون</span>${BODY.map(c=>`<button class="chip" data-col="${ref}|${c}" aria-pressed="${l.color===c}">${c}</button>`).join("")}</div>
-      <div class="ochips"><span>الإضاءة</span>${LIGHT.map(c=>`<button class="chip" data-lt="${ref}|${c}" aria-pressed="${l.light===c}">${c}</button>`).join("")}</div>
+      ${cols.length?`<div class="ochips"><span>اللون</span>${cols.map(c=>`<button class="chip" data-col="${ref}|${esc(c)}" aria-pressed="${l.color===c}">${esc(c)}</button>`).join("")}</div>`:""}
+      ${lts.length?`<div class="ochips"><span>الإضاءة</span>${lts.map(c=>`<button class="chip" data-lt="${ref}|${esc(c)}" aria-pressed="${l.light===c}">${esc(c)}</button>`).join("")}</div>`:""}
       <input class="inp lnote" data-note="${ref}" value="${esc(l.note)}" placeholder="ملحوظة (لون تاني، تبديل…)"></div>`};
   const row=p=>{const x=sel[p.id],n=qtyOf(p.id);
     return `<div class="prod ${n?"sel":""}" data-row="${p.id}"><button class="thumb" data-zoom="${p.id}" aria-label="كبّر الصورة">${imgHTML(p)}</button>
