@@ -151,7 +151,7 @@ nav.bottom .in{padding:6px 8px}
 nav.bottom button{background:none;border:0;padding:6px 0 8px;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:13px;font-weight:700;color:var(--muted);position:relative;border-radius:var(--rb)}
 nav.bottom button svg{width:24px;height:24px}
 nav.bottom button[aria-current="page"]{color:var(--action);background:var(--brand-soft)}
-nav.bottom .badge{position:absolute;top:4px;inset-inline-start:calc(50% + 6px);background:var(--bad);color:#fff;font-size:10.5px;border-radius:99px;min-width:18px;height:18px;line-height:18px;padding:0 5px}
+nav.bottom .badge{position:absolute;top:4px;inset-inline-start:calc(50% + 6px);background:var(--action);color:var(--onAction);font-weight:700;font-size:10.5px;border-radius:99px;min-width:18px;height:18px;line-height:18px;padding:0 5px}
 .fab{position:fixed;z-index:31;bottom:calc(86px + env(safe-area-inset-bottom,0px));inset-inline-start:max(16px,calc(50% - 244px));
   background:var(--action);color:var(--onAction);border:0;border-radius:var(--rb);padding:0 16px;height:48px;font-weight:700;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(40,40,37,.18);font-size:15px}
 .fab svg{width:20px;height:20px}
@@ -421,7 +421,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=36; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=37; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},

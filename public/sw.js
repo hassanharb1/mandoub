@@ -1,4 +1,4 @@
-const CACHE="mandoub-v36";
+const CACHE="mandoub-v37";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png","icon-maskable-192.png","icon-32.png","apple-touch-icon.png","logo-light.svg","logo-dark.svg","logo-stacked-light.svg","logo-stacked-dark.svg","symbol.svg"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL.map(u=>new Request(u,{cache:"reload"})))}).then(()=>self.skipWaiting()))});
