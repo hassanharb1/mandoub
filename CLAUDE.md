@@ -66,8 +66,9 @@ Talk to Hassan in Egyptian Arabic. All UI copy is natural Egyptian Arabic: short
    - a 3-screen first-run guide
    - rarely used things (full ledger, settings) moved out of the way
 3. ~~Replace the demo products with the real product list~~ — done (إيفورا + وايت لايت). Order totals are back (invoice-style), with pieces per carton typed by the rep.
-4. **Cloud backup and sync with Supabase** (chosen over Cloudflare D1 because it has built-in auth and row-level security). Use email login rather than SMS OTP, which costs per message. Keep the app offline-first and sync when online. Hosting stays on Cloudflare.
-5. Later: an Android APK (for reliable daily notifications), then a multi-rep, multi-company **SaaS** with a colleague/manager screen that receives orders directly instead of over WhatsApp.
+4. **New address with a domain:** Hassan wants the URL renamed from `mandoub-mestk` to SalesGo (e.g. `salesgo.mestk.com`), but has no domain yet (Oct 2026). Decided: wait for the domain and move once, ideally together with sync. Never rename the existing worker in the dashboard: the rep's data lives on that origin. Plan: a new worker `salesgo` (+ `salesgo-trial`) with the custom domain, the old one kept running, data moved by backup → restore (or a «انقل بياناتي» button if Hassan wants it).
+5. **Cloud backup and sync with Supabase** (chosen over Cloudflare D1 because it has built-in auth and row-level security). Use email login rather than SMS OTP, which costs per message. Keep the app offline-first and sync when online. Hosting stays on Cloudflare.
+6. Later: an Android APK (for reliable daily notifications), then a multi-rep, multi-company **SaaS** with a colleague/manager screen that receives orders directly instead of over WhatsApp.
 
 ## Related assets
 - A 57 s explainer video (`mandoub-explainer`, MESTK brand, 12 scenes) lives in the MESTK Motion Studio at `Downloads\MESTK\mestk-motion-studio`. Its spec is `src/videos/mandoub-explainer.ts` and its screenshots are in `public/media/mandoub/`. If the UI changes a lot, re-capture the screens and re-render.
