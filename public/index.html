@@ -337,7 +337,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=32; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=33; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1256,15 +1256,16 @@ async function orderImage(o,isEdit){
   ctx.textAlign="left";ctx.direction="ltr";ctx.fillText("MESTK",P,H-48);
   return new Promise(r=>cv.toBlob(r,"image/jpeg",0.9))}
 
-function sendSheet(id,isEdit){const o=S.orders.find(x=>x.id===id);const txt=message(o,isEdit);
+function sendSheet(id,isEdit){const o=S.orders.find(x=>x.id===id);const txt=message(o,isEdit),c=cust(o.customerId),cph=bcPhone(c);
   const href=`https://wa.me/${S.settings.phone?waNum(S.settings.phone):""}?text=${encodeURIComponent(txt)}`;
-  const sh=sheet(S.settings.colleague?`ابعت الطلب لـ ${S.settings.colleague}`:"ابعت الطلب",`<div class="oimg" id="oimg"><span class="hint">بجهز صورة الطلب…</span></div>
+  const sh=sheet(o.status!=="draft"?"ابعت الطلب تاني":S.settings.colleague?`ابعت الطلب لـ ${S.settings.colleague}`:"ابعت الطلب",`<div class="oimg" id="oimg"><span class="hint">بجهز صورة الطلب…</span></div>
     <details><summary class="link" style="cursor:pointer">شوف الرسالة</summary><div class="msg" id="mtxt" style="margin-top:8px">${esc(txt)}</div></details>
-    <p class="hint">اختار تبعت الصورة ولا الرسالة. هتفتحلك المشاركة: اختار واتساب وبعدين ${esc(S.settings.colleague||"زميلك")} أو الجروب.</p>`,
+    <p class="hint">اختار تبعت الصورة ولا الرسالة. هتفتحلك المشاركة: اختار واتساب وبعدين ${esc(S.settings.colleague||"زميلك")} أو الجروب أو العميل.${cph?` و«ابعته للعميل» بتفتح شات ${esc(c.name)} والرسالة مكتوبة.`:""}</p>`,
     `<div class="btns"><button class="btn wa" id="shr" disabled>ابعت الصورة</button><button class="btn ghost" id="stx">ابعت الرسالة</button></div>
-     <div class="btns"><button class="btn ghost" id="cp">انسخ الرسالة</button><button class="btn ghost" id="mk">بعته خلاص ✓</button></div>`);
+     <div class="btns">${cph?`<a class="btn ghost" id="scu" href="https://wa.me/${cph}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">ابعته للعميل</a>`:""}<button class="btn ghost" id="cp">انسخ الرسالة</button>${o.status==="draft"?`<button class="btn ghost" id="mk">بعته خلاص ✓</button>`:""}</div>`);
   const mark=()=>{if(o.status==="draft"){o.status="sent";o.hist.sent=Date.now();save()}};
-  const done=()=>{mark();closeSheet();render();toast(`طلب #${o.no} اتعلم إنه اتبعت`)};
+  // sending again never changes the order's step
+  const again=o.status!=="draft",done=()=>{mark();closeSheet();render();toast(again?`طلب #${o.no} اتبعت تاني`:`طلب #${o.no} اتعلم إنه اتبعت`)};
   const copy=()=>navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject();
   let file=null;const shr=sh.querySelector("#shr");
   orderImage(o,isEdit).then(blob=>{if(!blob||!sh.isConnected)return;file=new File([blob],`طلب-${o.no}.jpg`,{type:"image/jpeg"});
@@ -1278,7 +1279,8 @@ function sendSheet(id,isEdit){const o=S.orders.find(x=>x.id===id);const txt=mess
   sh.querySelector("#stx").onclick=async()=>{
     if(navigator.share){try{await navigator.share({text:txt});done()}catch(e){if(e&&e.name!=="AbortError"){window.open(href,"_blank","noopener");setTimeout(done,400)}}}
     else{window.open(href,"_blank","noopener");setTimeout(done,400)}};
-  sh.querySelector("#mk").onclick=done;
+  sh.querySelector("#mk")?.addEventListener("click",done);
+  sh.querySelector("#scu")?.addEventListener("click",()=>setTimeout(done,400));
   sh.querySelector("#cp").onclick=()=>{copy().then(()=>toast("اتنسخت"),()=>{const d=sh.querySelector("details");d.open=true;const r=document.createRange();r.selectNodeContents($("#mtxt"));const s=getSelection();s.removeAllRanges();s.addRange(r);toast("اتحددت، انسخها")})}}
 
 function orderSheet(id){const o=S.orders.find(x=>x.id===id);const c=cust(o.customerId);const s=STATUSES[SIDX[o.status]];
@@ -1288,10 +1290,12 @@ function orderSheet(id){const o=S.orders.find(x=>x.id===id);const c=cust(o.custo
     <div class="inrow" style="align-items:center"><span class="hint" style="flex:none">الدفع</span><div class="seg" id="opay2">${[["cash","كاش"],["credit","آجل"],["","بعدين"]].map(([k,t])=>`<button data-pay="${k}" aria-pressed="${(o.pay||"")===k}">${t}</button>`).join("")}</div></div></div>
     <section class="sec"><h2>المراحل</h2><div class="list">${STATUSES.map((x,i)=>{const t=i===0?o.created:o.hist[x.k];return `<div class="row"><span class="dot ${i<=SIDX[o.status]?"ok":""}" style="${i<=SIDX[o.status]?"":"background:var(--line)"}"></span><span class="main">${x.t}</span><span class="s">${t?esc(when(t)):""}</span></div>`}).join("")}</div></section>`,
     `${o.status==="draft"?`<button class="btn wa block" id="osd">ابعته واتساب</button>`:s.next?`<button class="btn primary block" id="oad">${s.next} ✓</button>`:""}
+     ${o.status!=="draft"?`<button class="btn wa block" id="osa">📤 ابعته تاني</button>`:""}
      <div class="btns"><button class="btn ghost" id="oed">عدّل</button><button class="btn ghost" id="ocu">افتح العميل</button><button class="btn ghost" id="odl">امسح</button></div>`);
   sh.querySelector("#opay2").onclick=e=>{const b=e.target.closest("[data-pay]");if(!b)return;o.pay=b.dataset.pay;save();
     sh.querySelectorAll("#opay2 [data-pay]").forEach(x=>x.setAttribute("aria-pressed",x===b));toast(o.pay?`اتسجل ${PAY[o.pay]}`:"هتتسأل بعدين");render()};
   sh.querySelector("#osd")?.addEventListener("click",()=>{closeSheet();sendSheet(o.id)});
+  sh.querySelector("#osa")?.addEventListener("click",()=>{closeSheet();sendSheet(o.id)});
   sh.querySelector("#oad")?.addEventListener("click",()=>{closeSheet();advance(o.id)});
   sh.querySelector("#oed").onclick=()=>{closeSheet();orderEditor({id:o.id})};
   sh.querySelector("#ocu").onclick=()=>{closeSheet();go("customer",o.customerId)};
