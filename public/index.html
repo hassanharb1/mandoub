@@ -421,7 +421,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=37; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=38; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -828,8 +828,11 @@ function dayColSection(){const list=dayPays(filt.dcDay),sum=list.reduce((a,p)=>a
   const rows=ps=>ps.map(p=>`<div class="row prow"><button class="pmain" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${payNote(p)?`<br><span class="s">${esc(payNote(p))}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>
     <span class="psend"><button data-pimg="${p.id}" aria-label="ابعت صورة للتحصيل ده">صورة</button><button data-ptxt="${p.id}" aria-label="ابعت رسالة للتحصيل ده">رسالة</button></span></div>`).join("");
   const sub=(t,ps)=>`<div class="row s" style="font-size:12.5px;font-weight:800;padding:6px 14px;background:var(--sunk)">${t} · ${money(ps.reduce((a,p)=>a+p.amount,0))} ج</div>`;
-  return `<section class="sec" id="dcSec"><h2>تحصيلات يوم <span class="count">${esc(daysSince(d)===0?"النهارده":fmtDay(d))}</span>
-    <label class="link" style="position:relative;cursor:pointer;margin-inline-start:auto">غيّر اليوم<input type="date" id="dcDay" value="${filt.dcDay}" max="${isoDay(Date.now())}" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></h2>
+  const today=isoDay(Date.now()),yest=isoDay(Date.now()-DAY),other=filt.dcDay!==today&&filt.dcDay!==yest;
+  const dchip=(iso,t)=>{const n=dayPays(iso).length;return `<button class="chip" data-dcd="${iso}" aria-pressed="${filt.dcDay===iso}">${t}${n?`<span class="num" style="opacity:.65;padding-right:7px">(${n})</span>`:""}</button>`};
+  return `<section class="sec" id="dcSec"><h2>تحصيلات يوم <span class="count">${esc(daysSince(d)===0?"النهارده":daysSince(d)===1?"امبارح":fmtDay(d))}</span></h2>
+    <div class="chips" style="margin-bottom:10px">${dchip(today,"النهارده")}${dchip(yest,"امبارح")}
+      <label class="chip" aria-pressed="${other}" style="position:relative;display:inline-flex;align-items:center;cursor:pointer">${other?esc(fmtDay(d)):"يوم تاني"}<input type="date" id="dcDay" value="${filt.dcDay}" max="${today}" aria-label="اختار يوم" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></div>
     ${list.length?`<div class="list ledger">${old.length?sub("دفعات اليوم",neu):""}${rows(neu)}${old.length?sub("دفعات قديمة",old)+rows(old):""}
       <div class="row"><span class="main t">المجموع · ${list.length} تحصيل</span><span class="amt">${money(sum)} ج</span></div></div>
       <div class="btns"><button class="btn wa" id="dcImg">ابعت صورة</button><button class="btn ghost" id="dcTxt">ابعت رسالة</button></div>`
@@ -936,6 +939,7 @@ async function dayColImage(iso,list){const F="Cairo,system-ui,Tahoma,sans-serif"
 function bindDayCol(v){
   v.querySelectorAll("[data-ptxt]").forEach(b=>b.onclick=()=>{const p=S.payments.find(x=>x.id===b.dataset.ptxt);if(p)shareText(payMessage(p))});
   v.querySelectorAll("[data-pimg]").forEach(b=>b.onclick=()=>{const p=S.payments.find(x=>x.id===b.dataset.pimg);if(p)sharePayImage(p)});const di=v.querySelector("#dcDay");if(di)di.onchange=()=>{if(di.value){filt.dcDay=di.value;render()}};
+  v.querySelectorAll("[data-dcd]").forEach(b=>b.onclick=()=>{filt.dcDay=b.dataset.dcd;render()});
   v.querySelector("#dcAdd")?.addEventListener("click",()=>noteSheet(filt.dcDay));
   v.querySelector("#dcTxt")?.addEventListener("click",()=>shareText(dayColText(filt.dcDay)));
   const bi=v.querySelector("#dcImg");if(bi){let file=null;const iso=filt.dcDay;bi.disabled=true;
