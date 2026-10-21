@@ -135,6 +135,7 @@ main{display:flex;flex-direction:column;gap:18px;padding-left:max(16px,env(safe-
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:1px solid var(--border);background:var(--surface);border-radius:var(--rc);padding:0 14px;min-height:44px;font-size:14px;font-weight:700;color:var(--fg)}
 .chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.dcchips{gap:5px}.dcchips .chip{flex:1 1 auto;padding:0 5px;font-size:13px;white-space:nowrap;justify-content:center}
 
 .search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rb);padding:0 14px;min-height:52px}
 .search:focus-within{border-color:var(--action);box-shadow:0 0 0 1px var(--action)}
@@ -421,7 +422,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=38; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=39; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -820,6 +821,14 @@ function bindReqRows(v){v.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>
 /* one day's collections (the rep's «دفعات» note): list, total, and a picture or text for the colleague */
 filt.dcDay=isoDay(Date.now());
 const dayPays=iso=>{const t=fromIso(iso);const a=sod(t),b=a+DAY;return S.payments.filter(p=>p.date>=a&&p.date<b).sort((x,y)=>x.date-y.date)};
+/* several days at once: filt.dcR = {k:"hand"} (since the last «سلّمت للشركة») or {k:"range",a,b} (iso days); null = one day (filt.dcDay) */
+filt.dcR=null;
+const lastHandover=()=>S.handovers.reduce((m,h)=>!m||h.date>m.date?h:m,null);
+function dcRange(){const r=filt.dcR;if(!r)return null;let list,title,sub="";
+  if(r.k==="hand"){const h=lastHandover();list=S.payments.filter(p=>!h||p.date>h.date);title="من آخر تسليم";sub=h?`بعد ما سلّمت للشركة يوم ${fmtDay(h.date)}`:"من أول ما بدأت"}
+  else{const a=sod(fromIso(r.a)),b=sod(fromIso(r.b))+DAY;list=S.payments.filter(p=>p.date>=a&&p.date<b);title=`من ${fmtDay(fromIso(r.a))} لحد ${fmtDay(fromIso(r.b))}`}
+  return {list:list.sort((x,y)=>x.date-y.date),title,sub}}
+const byDay=list=>{const m=new Map();list.forEach(p=>{const k=isoDay(p.date);if(!m.has(k))m.set(k,[]);m.get(k).push(p)});return [...m.entries()]};
 // an old payment: money that came in on p.date but settles an older account (p.forDate)
 const oldTag=p=>p.forDate?`قديمة · عن يوم ${fmtDay(p.forDate)}`:"";
 const payNote=p=>[oldTag(p),p.note].filter(Boolean).join(" · ");
@@ -828,11 +837,22 @@ function dayColSection(){const list=dayPays(filt.dcDay),sum=list.reduce((a,p)=>a
   const rows=ps=>ps.map(p=>`<div class="row prow"><button class="pmain" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${payNote(p)?`<br><span class="s">${esc(payNote(p))}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>
     <span class="psend"><button data-pimg="${p.id}" aria-label="ابعت صورة للتحصيل ده">صورة</button><button data-ptxt="${p.id}" aria-label="ابعت رسالة للتحصيل ده">رسالة</button></span></div>`).join("");
   const sub=(t,ps)=>`<div class="row s" style="font-size:12.5px;font-weight:800;padding:6px 14px;background:var(--sunk)">${t} · ${money(ps.reduce((a,p)=>a+p.amount,0))} ج</div>`;
-  const today=isoDay(Date.now()),yest=isoDay(Date.now()-DAY),other=filt.dcDay!==today&&filt.dcDay!==yest;
-  const dchip=(iso,t)=>{const n=dayPays(iso).length;return `<button class="chip" data-dcd="${iso}" aria-pressed="${filt.dcDay===iso}">${t}${n?`<span class="num" style="opacity:.65;padding-right:7px">(${n})</span>`:""}</button>`};
+  const today=isoDay(Date.now()),yest=isoDay(Date.now()-DAY),R=dcRange(),other=!R&&filt.dcDay!==today&&filt.dcDay!==yest;
+  const dchip=(iso,t)=>{const n=dayPays(iso).length;return `<button class="chip" data-dcd="${iso}" aria-pressed="${!R&&filt.dcDay===iso}">${t}${n?`<span class="num" style="opacity:.65;padding-right:4px">(${n})</span>`:""}</button>`};
+  const sd=t=>{const x=new Date(t);return `${x.getDate()}/${x.getMonth()+1}`};
+  const chips=`<div class="chips dcchips" style="margin-bottom:10px">${dchip(today,"النهارده")}${dchip(yest,"امبارح")}
+      <button class="chip" data-dcr="hand" aria-pressed="${R&&filt.dcR.k==="hand"?"true":"false"}">من آخر تسليم</button>
+      <button class="chip" id="dcPick" aria-pressed="${other||(R&&filt.dcR.k==="range")?"true":"false"}">${R&&filt.dcR.k==="range"?`${sd(fromIso(filt.dcR.a))} – ${sd(fromIso(filt.dcR.b))}`:other?esc(fmtDay(d)):"يوم تاني"}</button></div>`;
+  if(R){const days=byDay(R.list),tot=R.list.reduce((a,p)=>a+p.amount,0);
+    return `<section class="sec" id="dcSec"><h2>تحصيلات <span class="count">${esc(R.title)}</span></h2>${chips}
+    ${R.list.length?`<div class="list ledger">${R.sub?`<div class="row s" style="font-size:12.5px;padding:6px 14px;background:var(--sunk)">${esc(R.sub)}</div>`:""}
+      ${days.map(([iso,ps])=>`<button class="row" data-dcd="${iso}"><span class="main"><span class="t">${esc(fmtDay(fromIso(iso)))}</span><br><span class="s">${ps.length} تحصيل</span></span><span class="amt minus">${money(ps.reduce((a,p)=>a+p.amount,0))}</span></button>`).join("")}
+      <div class="row"><span class="main t">المجموع · ${R.list.length} تحصيل</span><span class="amt">${money(tot)} ج</span></div></div>
+      <p class="hint" style="margin-top:6px">دوس على أي يوم علشان تشوف تحصيلاته</p>
+      <div class="btns"><button class="btn wa" id="dcImg">ابعت صورة</button><button class="btn ghost" id="dcTxt">ابعت رسالة</button></div>`
+      :`<div class="empty">مفيش تحصيلات ${R.sub?"من ساعة آخر تسليم":"في الأيام دي"}</div>`}</section>`}
   return `<section class="sec" id="dcSec"><h2>تحصيلات يوم <span class="count">${esc(daysSince(d)===0?"النهارده":daysSince(d)===1?"امبارح":fmtDay(d))}</span></h2>
-    <div class="chips" style="margin-bottom:10px">${dchip(today,"النهارده")}${dchip(yest,"امبارح")}
-      <label class="chip" aria-pressed="${other}" style="position:relative;display:inline-flex;align-items:center;cursor:pointer">${other?esc(fmtDay(d)):"يوم تاني"}<input type="date" id="dcDay" value="${filt.dcDay}" max="${today}" aria-label="اختار يوم" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></div>
+    ${chips}
     ${list.length?`<div class="list ledger">${old.length?sub("دفعات اليوم",neu):""}${rows(neu)}${old.length?sub("دفعات قديمة",old)+rows(old):""}
       <div class="row"><span class="main t">المجموع · ${list.length} تحصيل</span><span class="amt">${money(sum)} ج</span></div></div>
       <div class="btns"><button class="btn wa" id="dcImg">ابعت صورة</button><button class="btn ghost" id="dcTxt">ابعت رسالة</button></div>`
@@ -895,7 +915,7 @@ function noteSheet(iso){const dr=S.noteDraft||{};iso=iso||dr.day||isoDay(Date.no
     ls.forEach(x=>{let c=x.c;if(!c){c=made[x.k];if(!c){c=made[x.k]={id:uid(),name:x.name,owner:"",area:"",phone:"",opening:0};S.customers.push(c);added++}}
       const p={id:uid(),customerId:c.id,amount:x.amount,date:fromIso(day),note:x.note};if(x.old)p.forDate=fromIso(oldFor[x.raw]||isoDay(fromIso(day)-7*DAY));
       S.payments.push(p);ids.push(p.id)});
-    delete S.noteDraft;filt.dcDay=day;save();render();noteDone(ids,day,added)}}
+    delete S.noteDraft;filt.dcDay=day;filt.dcR=null;save();render();noteDone(ids,day,added)}}
 // after saving the note: send each collection on its own, or all of them as one picture or message
 function noteDone(ids,iso,added){const list=ids.map(id=>S.payments.find(p=>p.id===id)).filter(Boolean),sum=list.reduce((a,p)=>a+p.amount,0);
   const sh=sheet("اتسجل ✓",`<div class="card"><span class="hint">${list.length} دفعة${added?` · واتضاف ${added} عميل جديد`:""}</span><div style="font-size:24px;font-weight:800">${money(sum)} ج</div></div>
@@ -912,18 +932,28 @@ function noteDone(ids,iso,added){const list=ids.map(id=>S.payments.find(p=>p.id=
 async function shareFile(file){const data={files:[file]};
   if(navigator.canShare&&navigator.canShare(data)){try{await navigator.share(data)}catch(e){}}
   else{const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();toast("الصورة نزلت، ابعتها من واتساب")}}
+function rangeColText(R){const ln=p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج${p.forDate?` (عن يوم ${fmtDay(p.forDate)})`:""}${p.note?` (${p.note})`:""}`,sm=ps=>ps.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US");
+  return [`تحصيلات ${R.title}`,...(R.sub?[R.sub]:[]),...byDay(R.list).flatMap(([iso,ps])=>["",`${fmtDay(fromIso(iso))}:`,...ps.map(ln),`مجموع اليوم: ${sm(ps)} ج`]),"",
+    `المجموع: ${sm(R.list)} ج · ${R.list.length} تحصيل`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
+const rangeHead=R=>({title:`تحصيلات ${R.title}`,sub:R.sub,groups:byDay(R.list).map(([iso,ps])=>[fmtDay(fromIso(iso)),ps])});
+function dcPickSheet(){const R=filt.dcR&&filt.dcR.k==="range"?filt.dcR:null,a=R?R.a:filt.dcDay,b=R?R.b:filt.dcDay;
+  const sh=sheet("اختار الأيام",`${dateField("dpa",fromIso(a),"من يوم")}${dateField("dpb",fromIso(b),"لحد يوم")}
+    <p class="hint">علشان يوم واحد بس، خلّي الاتنين نفس اليوم</p>`,`<button class="btn primary block" id="dpGo">اعرض التحصيلات</button>`);
+  bindDate("dpa");bindDate("dpb");
+  sh.querySelector("#dpGo").onclick=()=>{let x=$("#dpa").value,y=$("#dpb").value;if(!x||!y)return toast("اختار اليومين");if(x>y)[x,y]=[y,x];
+    if(x===y){filt.dcR=null;filt.dcDay=x}else filt.dcR={k:"range",a:x,b:y};closeSheet();render();$("#dcSec")?.scrollIntoView({block:"start"})}}
 function dayColText(iso,list){list=list||dayPays(iso);const d=fromIso(iso),neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate);
   const ln=p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج${p.forDate?` (عن يوم ${fmtDay(p.forDate)})`:""}${p.note?` (${p.note})`:""}`;
   return [`تحصيلات يوم ${fmtDay(d)}`,"",...(old.length&&neu.length?["دفعات اليوم:"]:[]),...neu.map(ln),...(old.length?[...(neu.length?[""]:[]),"دفعات قديمة:",...old.map(ln)]:[]),"",
     `المجموع: ${list.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US")} ج`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
-async function dayColImage(iso,list){const F="Cairo,system-ui,Tahoma,sans-serif";try{await document.fonts.load(`800 40px Cairo`)}catch(e){}
+async function dayColImage(iso,list,head){const F="Cairo,system-ui,Tahoma,sans-serif";try{await document.fonts.load(`800 40px Cairo`)}catch(e){}
   list=list||dayPays(iso);const d=new Date(fromIso(iso)),W=1080,P=44,RH=96,sum=list.reduce((a,p)=>a+p.amount,0);
-  const neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate),groups=old.length?[["دفعات اليوم",neu],["دفعات قديمة",old]].filter(g=>g[1].length):[["",neu]];
+  const neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate),groups=head?head.groups:old.length?[["دفعات اليوم",neu],["دفعات قديمة",old]].filter(g=>g[1].length):[["",neu]];
   const cv=document.createElement("canvas"),ctx=cv.getContext("2d");const H=230+list.length*RH+groups.filter(g=>g[0]).length*70+150+80;cv.width=W;cv.height=H;
   ctx.direction="rtl";ctx.textBaseline="middle";const R=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
   ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);R(0,0,W,180,0,"#282825");await drawSymbol(ctx,P,100,52);
-  ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;ctx.fillText(`تحصيلات يوم ${WD[d.getDay()]}`,W-P,66);
-  ctx.font=`600 28px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText(`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}${S.settings.rep?` · ${S.settings.rep}`:""}`,W-P,128);
+  ctx.textAlign="right";ctx.fillStyle="#FFFFFF";const T=head?head.title:`تحصيلات يوم ${WD[d.getDay()]}`;let fs=46;do{ctx.font=`800 ${fs}px ${F}`}while(ctx.measureText(T).width>W-2*P-230&&--fs>26);ctx.fillText(T,W-P,66);
+  ctx.font=`600 28px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText(head?[head.sub,S.settings.rep].filter(Boolean).join(" · "):`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}${S.settings.rep?` · ${S.settings.rep}`:""}`,W-P,128);
   ctx.textAlign="left";ctx.fillStyle="#E07A4F";ctx.font=`800 30px ${F}`;ctx.fillText(`${list.length} تحصيل`,P,66);
   let y=204;groups.forEach(([title,ps])=>{
     if(title){const st=ps.reduce((a,p)=>a+p.amount,0);ctx.textAlign="right";ctx.fillStyle="#BD572F";ctx.font=`800 30px ${F}`;ctx.fillText(title,W-P,y+30);
@@ -939,11 +969,14 @@ async function dayColImage(iso,list){const F="Cairo,system-ui,Tahoma,sans-serif"
 function bindDayCol(v){
   v.querySelectorAll("[data-ptxt]").forEach(b=>b.onclick=()=>{const p=S.payments.find(x=>x.id===b.dataset.ptxt);if(p)shareText(payMessage(p))});
   v.querySelectorAll("[data-pimg]").forEach(b=>b.onclick=()=>{const p=S.payments.find(x=>x.id===b.dataset.pimg);if(p)sharePayImage(p)});const di=v.querySelector("#dcDay");if(di)di.onchange=()=>{if(di.value){filt.dcDay=di.value;render()}};
-  v.querySelectorAll("[data-dcd]").forEach(b=>b.onclick=()=>{filt.dcDay=b.dataset.dcd;render()});
+  v.querySelectorAll("[data-dcd]").forEach(b=>b.onclick=()=>{filt.dcR=null;filt.dcDay=b.dataset.dcd;render()});
+  v.querySelectorAll("[data-dcr]").forEach(b=>b.onclick=()=>{filt.dcR={k:b.dataset.dcr};render()});
+  v.querySelector("#dcPick")?.addEventListener("click",dcPickSheet);
   v.querySelector("#dcAdd")?.addEventListener("click",()=>noteSheet(filt.dcDay));
-  v.querySelector("#dcTxt")?.addEventListener("click",()=>shareText(dayColText(filt.dcDay)));
+  const R=dcRange();
+  v.querySelector("#dcTxt")?.addEventListener("click",()=>shareText(R?rangeColText(R):dayColText(filt.dcDay)));
   const bi=v.querySelector("#dcImg");if(bi){let file=null;const iso=filt.dcDay;bi.disabled=true;
-    dayColImage(iso).then(b=>{file=new File([b],`تحصيلات-${iso}.jpg`,{type:"image/jpeg"});bi.disabled=false});
+    (R?dayColImage(iso,R.list,rangeHead(R)):dayColImage(iso)).then(b=>{file=new File([b],`تحصيلات-${iso}.jpg`,{type:"image/jpeg"});bi.disabled=false});
     bi.onclick=async()=>{if(!file)return;const data={files:[file]};
       if(navigator.canShare&&navigator.canShare(data)){try{await navigator.share(data)}catch(e){}}
       else{const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();toast("الصورة نزلت، ابعتها من واتساب")}}}}
