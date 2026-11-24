@@ -1,4 +1,4 @@
-const CACHE="mandoub-v39";
+const CACHE="mandoub-v40";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png","icon-maskable-192.png","icon-32.png","apple-touch-icon.png","logo-light.svg","logo-dark.svg","logo-stacked-light.svg","logo-stacked-dark.svg","symbol.svg"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL.map(u=>new Request(u,{cache:"reload"})))}).then(()=>self.skipWaiting()))});
@@ -11,16 +11,12 @@ self.addEventListener("fetch",e=>{
   if(url.origin===location.origin&&url.pathname.endsWith("/"+PHOTOS)){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>put(e.request,res))));
   } else if(url.origin===location.origin){
-    // network first so updates arrive, but a slow line falls back to the saved copy after 4 s instead of hanging on the splash screen
-    e.respondWith(new Promise(resolve=>{let done=false;
-      const fromCache=()=>caches.match(e.request).then(r=>r||caches.match("index.html"));
-      const t=setTimeout(()=>fromCache().then(r=>{if(r&&!done){done=true;resolve(r)}}),4000);
-      // no-cache: always ask the server (it answers "not modified" cheaply), so the browser's own HTTP cache never hands back an old file
-      fetch(new Request(e.request.url,{cache:"no-cache",credentials:"same-origin"})).then(res=>{put(e.request,res);clearTimeout(t);
-          if(!done){done=true;resolve(res)}
-          // the page already opened from the saved copy: tell it a fresh copy has arrived
-          else if(e.request.mode==="navigate"&&res.ok)self.clients.matchAll({type:"window"}).then(cs=>cs.forEach(c=>c.postMessage({type:"fresh"})))})
-        .catch(()=>{clearTimeout(t);fromCache().then(r=>{if(!done){done=true;resolve(r||Response.error())}})})}));
+    // speed: open from the saved copy straight away (no waiting on a slow line) and refresh it in the background;
+    // when a newer page arrives the app shows «النسخة الجديدة نزلت» and one tap opens it. First visit: network.
+    const net=fetch(new Request(e.request.url,{cache:"no-cache",credentials:"same-origin"})).then(res=>{put(e.request,res);return res});
+    e.respondWith(caches.match(e.request).then(hit=>{
+      if(hit){e.waitUntil(net.then(res=>{if(e.request.mode==="navigate"&&res.ok)return self.clients.matchAll({type:"window"}).then(cs=>cs.forEach(c=>c.postMessage({type:"fresh"})))}).catch(()=>{}));return hit}
+      return net.catch(()=>caches.match("index.html").then(r=>r||Response.error()))}));
   } else if(url.host.includes("fonts.g")){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>put(e.request,res))));
   }

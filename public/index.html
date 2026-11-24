@@ -172,6 +172,10 @@ nav.bottom .badge{position:absolute;top:4px;inset-inline-start:calc(50% + 6px);b
 label.f{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700;color:var(--muted)}
 .inp{width:100%;min-height:48px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rb);padding:10px 14px;color:var(--fg);font-weight:600;font-size:16px}
 textarea.inp{min-height:96px;resize:vertical;line-height:1.6}
+.paysum{display:block;width:100%;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;padding-inline-end:104px;margin-bottom:10px;font-size:15px;line-height:1.7;position:relative;cursor:pointer}
+.paysum .s{font-size:13px;color:var(--muted)}.paysum .go{position:absolute;inset-inline-end:14px;top:50%;transform:translateY(-50%);color:var(--brand);font-weight:700;font-size:14px}
+.lgsum{margin-bottom:12px}
+textarea.inp.grow{min-height:0;resize:none;overflow:hidden}
 .inp:focus{border-color:var(--action);box-shadow:0 0 0 1px var(--action);outline:none}
 .inp:disabled{background:var(--raised);color:var(--muted)}
 .inp[aria-invalid="true"]{border-color:var(--error);box-shadow:0 0 0 1px var(--error)}
@@ -422,7 +426,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=39; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=40; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -586,7 +590,7 @@ function sheet(title,body,foot,opts){const stack=opts&&opts.stack&&$("#scrim");i
   ${opts&&opts.act||""}${full?"":`<button class="iconbtn" data-close aria-label="قفل">${icon("x")}</button>`}</div>
   <div class="sb">${body}</div>${foot?`<div class="sf">${foot}</div>`:""}</div>`;
   sc.addEventListener("click",e=>{if(e.target===sc||e.target.closest("[data-close]"))closeSheet()});
-  document.body.appendChild(sc);return sc.querySelector(".sheet")}
+  document.body.appendChild(sc);if(typeof backGuard==="function")backGuard();return sc.querySelector(".sheet")}
 function closeSheet(){stopMic();const s=$("#scrim2")||$("#scrim");if(s)s.remove()}
 
 /* ---------- voice dictation ---------- */
@@ -606,7 +610,26 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-mic]");if(
 
 /* ---------- routing ---------- */
 let route={v:"home"},filt={orders:"open",cq:"",oc:"الكل"};
-function go(v,arg){route={v,arg};render();window.scrollTo(0,0)}
+const TABS=["home","customers","orders","products","money"];let backHist=[];
+function go(v,arg){if(TABS.includes(v))backHist=[];else if(route.v!==v||route.arg!==arg)backHist.push(route);
+  route={v,arg};render();window.scrollTo(0,0);backGuard()}
+
+/* ---------- the phone's back button ---------- */
+// The app keeps one extra history entry. Android's back takes it and the app decides what back means:
+// close the photo, then the top sheet, then go back a screen (any tab goes back to Home),
+// and on Home a second press within 2.5 s leaves the app. The order editor asks for a second press too.
+let backArm=0,backT;
+function backGuard(){try{if(!history.state||history.state.mb!==1)history.pushState({mb:1},"")}catch(e){}}
+if(history.pushState){try{if(!history.state||history.state.mb!==1){history.replaceState({mb:0},"");history.pushState({mb:1},"")}}catch(e){}
+  addEventListener("popstate",()=>{clearTimeout(backT);
+    const lb=$(".lightbox");if(lb){lb.remove();return backGuard()}
+    const sc=$("#scrim2")||$("#scrim");
+    if(sc){const g=sc._guard&&sc._guard();if(g&&Date.now()-backArm>2500){backArm=Date.now();toast(g);return backGuard()}
+      backArm=0;closeSheet();return backGuard()}
+    if(backHist.length){route=backHist.pop();render();window.scrollTo(0,0);return backGuard()}
+    if(route.v!=="home"){route={v:"home"};render();window.scrollTo(0,0);return backGuard()}
+    // Home: stay one step before the edge; a second back now leaves, otherwise the guard comes back
+    backArm=Date.now();toast("دوس رجوع تاني علشان تخرج");backT=setTimeout(backGuard,2500)})}
 $("#nav").addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(b)go(b.dataset.go)});
 $("#fab").addEventListener("click",()=>quickCapture(route.v==="customer"?route.arg:null));
 $("#settingsBtn").addEventListener("click",settingsSheet);
@@ -678,9 +701,8 @@ function vCustomer(v){
   const last=orders[0];const al=alerts().filter(a=>a.cid===c.id&&!a.order&&!a.req);
   const freq={};orders.forEach(o=>o.items.forEach(i=>{const n=itemName(i);freq[n]=(freq[n]||0)+i.qty}));
   const top=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,4);
-  const ledger=[...S.payments.filter(p=>p.customerId===c.id).map(p=>({t:p.date,d:-p.amount,s:"تحصيل"+(payNote(p)?` · ${payNote(p)}`:""),k:`pay:${p.id}`})),
-    ...(S.adjusts||[]).filter(a=>a.customerId===c.id).map(a=>({t:a.date,d:a.amount,s:(a.amount>=0?"زوّدت عليه":"نزّلت من عليه")+(a.note?` · ${a.note}`:""),k:`adj:${a.id}`}))
-    ].sort((a,b)=>b.t-a.t).slice(0,30);
+  const ledger=custLedger(c.id),pays=S.payments.filter(p=>p.customerId===c.id),paid=pays.reduce((a,p)=>a+p.amount,0);
+  const lastPay=pays.reduce((m,p)=>Math.max(m,p.date),0);
   const ob=c.opening||0;
   v.innerHTML=`
   <div class="stats">
@@ -689,15 +711,19 @@ function vCustomer(v){
     <div class="stat"><div class="lbl">بيطلب كل</div><div class="v" style="font-size:14px">${rh?`${rh.avg} يوم`:"—"}</div></div>
   </div>
   <div class="btns"><button class="btn primary" id="cNew">طلب جديد</button><button class="btn dark" id="cCol">تحصيل</button><button class="btn ghost" id="cReq">مستني حاجة</button></div>
+  <section class="sec"><h2>الحساب والدفعات <button class="link" id="cAdj">ظبط الحساب</button></h2>
+    <button class="paysum" id="cPays">${pays.length?`${pays.length===1?"دفع دفعة واحدة":`دفع <b class="num">${pays.length}</b> ${pays.length<=10?"دفعات":"دفعة"}`} · الإجمالي <b>${money(paid)}</b> ج<br><span class="s">آخر دفعة: ${esc(dayLabel(lastPay))}</span>`:`لسه ما دفعش ولا دفعة`}<span class="go">كل دفعاته ›</span></button>
+    <div class="list ledger">
+    ${ledger.slice(0,5).map(ledgerRow).join("")}
+    ${ledger.length>5?`<button class="row more" id="cAll"><span class="main t">كل الحركات (<span class="num">${ledger.length}</span>)</span>${icon("chev","go")}</button>`:""}
+    <button class="row" id="cOpen"><span class="main"><span class="t">رصيد أول المدة</span><br><span class="s">${c.openingDate?`لحد ${esc(fmtDay(c.openingDate))} · `:""}دوس علشان تعدله</span></span><span class="amt ${ob<0?"minus":""}">${ob<0?"ليه ":""}${money(Math.abs(ob))}</span></button></div>
+    <p class="hint">عليه = رصيد أول المدة + اللي زوّدته − التحصيل. دوس على أي حركة علشان تعدلها أو تمسحها.</p></section>
   ${al.length?`<div class="list">${al.map(alertRow).join("")}</div>`:""}
   ${reqs.length?`<section class="sec"><h2>مستني منك <span class="count num">${reqs.length}</span></h2><div class="list">${reqs.map(reqRow).join("")}</div></section>`:""}
   ${open.length?`<section class="sec"><h2>طلبات مفتوحة <span class="count num">${open.length}</span></h2>${open.map(orderCard).join("")}</section>`:""}
   ${top.length?`<section class="sec"><h2>بياخد عادةً</h2><div class="list">${top.map(([n,q])=>`<div class="row"><span class="main t">${esc(n)}</span><span class="s">إجمالي ${money(q)}</span></div>`).join("")}</div>
     <button class="btn ghost block" id="cRepeat">كرر آخر طلب</button></section>`:""}
-  <section class="sec"><h2>كشف الحساب <button class="link" id="cAdj">ظبط الحساب</button></h2><div class="list ledger">
-    ${ledger.map(l=>`<button class="row" data-mv="${l.k}"><span class="main"><span class="t">${esc(l.s)}</span><br><span class="s">${esc(dayLabel(l.t))}</span></span><span class="amt ${l.d>0?"plus":"minus"}">${smoney(l.d>0?"+":"−",Math.abs(l.d))}</span></button>`).join("")}
-    <button class="row" id="cOpen"><span class="main"><span class="t">رصيد أول المدة</span><br><span class="s">${c.openingDate?`لحد ${esc(fmtDay(c.openingDate))} · `:""}دوس علشان تعدله</span></span><span class="amt ${ob<0?"minus":""}">${ob<0?"ليه ":""}${money(Math.abs(ob))}</span></button></div>
-    <p class="hint">عليه = رصيد أول المدة + اللي زوّدته − التحصيل. لو اتسحب عليه بضاعة أو الرقم مش مطابق للشركة، دوس «ظبط الحساب». دوس على أي حركة علشان تعدلها أو تمسحها.</p></section>
+
   <section class="sec"><h2>التواصل</h2><div class="card"><div class="t">${c.owner||c.phone?`${c.owner?`<b>${esc(c.owner)}</b>`:""}${c.owner&&c.phone?" · ":""}${c.phone?`<span class="num">${esc(c.phone)}</span>`:""}`:`<span class="hint">لسه مفيش اسم مسؤول ولا تليفون</span>`}</div>
     <div class="call">${c.phone?`<a class="btn ghost sm" href="tel:${esc(c.phone)}">اتصال</a><a class="btn wa sm" target="_blank" rel="noopener" href="https://wa.me/${waNum(c.phone)}">واتساب</a>`:""}
     <button class="btn ghost sm" id="cEdit">تعديل البيانات</button></div>${c.lastMsg?`<div class="hint" style="margin-top:6px">آخر رسالة واتساب: ${esc(when(c.lastMsg))}</div>`:""}</div></section>
@@ -705,6 +731,7 @@ function vCustomer(v){
   bindAlerts(v);bindOrderCards(v);bindReqRows(v);
   $("#cNew").onclick=()=>orderEditor({customerId:c.id});$("#cCol").onclick=()=>collectSheet(c.id);$("#cReq").onclick=()=>quickCapture(c.id);
   $("#cEdit").onclick=()=>customerSheet(c.id);$("#cOpen").onclick=()=>openingSheet(c.id);$("#cAdj").onclick=$("#cBal").onclick=()=>adjustSheet(c.id);bindMoves(v);
+  $("#cPays").onclick=()=>ledgerSheet(c.id,"pay");const ca=$("#cAll");if(ca)ca.onclick=()=>ledgerSheet(c.id,"all");
   const rp=$("#cRepeat");if(rp)rp.onclick=()=>orderEditor({customerId:c.id,items:orders[0].items.map(i=>({...i}))});
 }
 
@@ -813,6 +840,25 @@ function vOrders(v){
   ${S.requests.filter(r=>!r.done).length?`<div class="list">${S.requests.filter(r=>!r.done).sort((a,b)=>a.created-b.created).map(reqRow).join("")}</div>`:`<div class="empty">مفيش عميل مستني حاجة</div>`}</section>`;
   v.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{filt.orders=b.dataset.f;render()});bindOrderCards(v);bindReqRows(v);
 }
+// a customer's account: every collection and every «ظبط الحساب» line, newest first (no cap)
+function custLedger(cid){return [...S.payments.filter(p=>p.customerId===cid).map(p=>({t:p.date,d:-p.amount,s:"تحصيل"+(payNote(p)?` · ${payNote(p)}`:""),k:`pay:${p.id}`})),
+    ...(S.adjusts||[]).filter(a=>a.customerId===cid).map(a=>({t:a.date,d:a.amount,s:(a.amount>=0?"زوّدت عليه":"نزّلت من عليه")+(a.note?` · ${a.note}`:""),k:`adj:${a.id}`}))
+    ].sort((a,b)=>b.t-a.t)}
+const ledgerRow=l=>`<button class="row" data-mv="${l.k}"><span class="main"><span class="t">${esc(l.s)}</span><br><span class="s">${esc(dayLabel(l.t))}</span></span><span class="amt ${l.d>0?"plus":"minus"}">${smoney(l.d>0?"+":"−",Math.abs(l.d))}</span></button>`;
+// the whole account on one screen, for going over it with the accounts manager
+function ledgerSheet(cid,mode){const c=cust(cid);let m=mode||"all";
+  const sh=sheet(`حساب ${c.name}`,`<div class="chips" id="lgm"><button class="chip" data-lg="pay">الدفعات بس</button><button class="chip" data-lg="all">كل الحركات</button></div><div id="lgb"></div>`,null,{full:true});
+  const draw=()=>{sh.querySelectorAll("[data-lg]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lg===m));
+    const all=custLedger(cid),list=m==="pay"?all.filter(l=>l.k.startsWith("pay:")):all,paid=all.filter(l=>l.k.startsWith("pay:")).reduce((a,l)=>a-l.d,0);
+    const adj=all.filter(l=>l.k.startsWith("adj:")).reduce((a,l)=>a+l.d,0),ob=c.opening||0,b=balance(cid);
+    sh.querySelector("#lgb").innerHTML=`<div class="card lgsum">
+      <div class="total"><span>رصيد أول المدة${c.openingDate?` <small class="hint">لحد ${esc(fmtDay(c.openingDate))}</small>`:""}</span><span>${ob<0?"ليه ":""}${money(Math.abs(ob))} ج</span></div>
+      ${adj?`<div class="total"><span>${adj>0?"زوّدت عليه":"نزّلت من عليه"}</span><span>${money(Math.abs(adj))} ج</span></div>`:""}
+      <div class="total"><span>اتحصّل منه (${all.filter(l=>l.k.startsWith("pay:")).length})</span><span>${money(paid)} ج</span></div>
+      <div class="total net"><span>${b<0?"ليه":"عليه"} دلوقتي</span><span>${money(Math.abs(b))} ج</span></div></div>
+      ${list.length?`<div class="list ledger">${list.map(ledgerRow).join("")}</div>`:`<div class="empty">${m==="pay"?"لسه ما دفعش ولا دفعة":"مفيش حركات"}</div>`}`;
+    bindMoves(sh)};
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-lg]");if(b){m=b.dataset.lg;draw()}});draw()}
 function bindMoves(v){v.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.mv.split(":");
   if(k==="pay")collectSheet(null,id);else if(k==="hand")handoverSheet(id);else if(k==="adj")adjustSheet(null,id);else orderSheet(id)})}
 function reqRow(r){return `<button class="row alert" data-r="${r.id}"><span class="dot info"></span><span class="main"><span class="t">${esc(cust(r.customerId).name)}</span><br><span class="s">${esc(r.text)} · ${esc(when(r.created))}</span></span></button>`}
@@ -1047,8 +1093,22 @@ filt.co=CAT.companies[0]?.id||"";filt.pcat="الكل";filt.pq="";
 const UIMG={};
 const imgSrc=k=>!k?null:k.startsWith("u:")?UIMG[k.slice(2)]||null:self.CATIMG?self.CATIMG[k]||null:null;
 const photo=p=>p&&imgSrc(p.img);
-const imgHTML=p=>{const src=photo(p);return src?`<img src="${src}" alt="" decoding="async">`:p&&p.img?`<span class="ph" data-ph="${esc(p.img)}">…</span>`:`<span class="ph">مفيش صورة</span>`};
-const fillPhotos=()=>document.querySelectorAll("[data-ph]").forEach(el=>{const src=imgSrc(el.dataset.ph);if(src)el.outerHTML=`<img src="${src}" alt="" decoding="async">`});
+// speed: a photo is a ~4 KB data URI; pasting 230 of them into the list's HTML on every redraw made the
+// order screen slow on the rep's phone. Each photo becomes a short blob: URL once (made on first use, then reused).
+const BLOB={};
+function blobSrc(src){if(!src||!src.startsWith("data:"))return src;if(BLOB[src])return BLOB[src];
+  try{const i=src.indexOf(","),mime=src.slice(5,src.indexOf(";")),bin=atob(src.slice(i+1)),u=new Uint8Array(bin.length);
+    for(let j=0;j<bin.length;j++)u[j]=bin.charCodeAt(j);return BLOB[src]=URL.createObjectURL(new Blob([u],{type:mime}))}catch(e){return src}}
+const imgTag=src=>`<img src="${blobSrc(src)}" alt="" loading="lazy" decoding="async">`;
+const imgHTML=p=>{const src=photo(p);return src?imgTag(src):p&&p.img?`<span class="ph" data-ph="${esc(p.img)}">…</span>`:`<span class="ph">مفيش صورة</span>`};
+const fillPhotos=()=>document.querySelectorAll("[data-ph]").forEach(el=>{const src=imgSrc(el.dataset.ph);if(src)el.outerHTML=imgTag(src)});
+// long lists draw the first rows now and the rest as the rep scrolls down
+function drawRows(box,list,rowFn,first){clearRows(box);first=first||24;box.innerHTML=list.slice(0,first).map(rowFn).join("");let at=first;
+  if(at>=list.length)return;const end=document.createElement("div");end.className="more-end";end.style.height="1px";box.after(end);
+  const io=new IntersectionObserver(es=>{if(!es.some(x=>x.isIntersecting))return;if(!end.isConnected){io.disconnect();return}
+    box.insertAdjacentHTML("beforeend",list.slice(at,at+30).map(rowFn).join(""));at+=30;if(at>=list.length){io.disconnect();end.remove()}},{root:box.closest(".sb"),rootMargin:"600px"});
+  io.observe(end);box._more=()=>{io.disconnect();end.remove()}}
+function clearRows(box){if(box._more){box._more();box._more=null}}
 function loadPhotos(){const sc=document.createElement("script");sc.src="catalog-img.js";sc.onload=fillPhotos;document.body.appendChild(sc);
   imgAll().then(o=>{Object.assign(UIMG,o);fillPhotos()}).catch(()=>{})}
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("mandoub-img",1);r.onupgradeneeded=()=>r.result.createObjectStore("img");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
@@ -1162,15 +1222,16 @@ function vProducts(v){
     $("#vcats").hidden=!!q;
     $("#vcats").innerHTML=catsOf(filt.co).map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${c===filt.pcat}">${esc(c)}</button>`).join("");
     const list=findProducts(filt.co,filt.pcat,q);
-    $("#vlist").innerHTML=(list.length?`<div class="grid">${list.map(p=>`<button class="pcard" data-pz="${p.id}"><div class="im">${imgHTML(p)}</div><div class="b"><span class="t">${esc(p.name)}</span>
-      <span class="s" style="font-size:12.5px;color:var(--muted)">${q?esc(coName(p.co))+" · ":""}${p.code?esc(p.code):esc(p.cat)}</span><span class="pr">${p.price?money(p.price)+" ج":"—"}</span>${p.mine?`<span class="ptag">مضاف منك</span>`:p.edited?`<span class="ptag">معدّل</span>`:""}</div></button>`).join("")}</div>`
-      :`<div class="empty">مفيش منتج بالاسم ده</div>`)+(!q&&co&&co.note?`<p class="hint" style="margin-top:10px">${esc(co.name)}: ${esc(co.note)}</p>`:"")};
+    const card=p=>`<button class="pcard" data-pz="${p.id}"><div class="im">${imgHTML(p)}</div><div class="b"><span class="t">${esc(p.name)}</span>
+      <span class="s" style="font-size:12.5px;color:var(--muted)">${q?esc(coName(p.co))+" · ":""}${p.code?esc(p.code):esc(p.cat)}</span><span class="pr">${p.price?money(p.price)+" ج":"—"}</span>${p.mine?`<span class="ptag">مضاف منك</span>`:p.edited?`<span class="ptag">معدّل</span>`:""}</div></button>`;
+    $("#vlist").innerHTML=(list.length?`<div class="grid" id="vgrid"></div>`:`<div class="empty">مفيش منتج بالاسم ده</div>`)+(!q&&co&&co.note?`<p class="hint" style="margin-top:10px">${esc(co.name)}: ${esc(co.note)}</p>`:"");
+    if(list.length)drawRows($("#vgrid"),list,card)};
   draw();
   v.onclick=e=>{const c=e.target.closest("[data-co]"),k=e.target.closest("[data-cat]"),z=e.target.closest("[data-pz]");
     if(c){filt.co=c.dataset.co;filt.pcat="الكل";filt.pq="";$("#vq").value="";draw()}
     if(k){filt.pcat=k.dataset.cat;draw()}
     if(z)lightbox(z.dataset.pz,true)};
-  $("#vq").oninput=e=>{filt.pq=e.target.value;draw()};
+  let vqt;$("#vq").oninput=e=>{filt.pq=e.target.value;clearTimeout(vqt);vqt=setTimeout(draw,180)};
 }
 
 /* ---------- order editor ---------- */
@@ -1219,6 +1280,8 @@ function orderEditor(init){
      <button class="btn primary block" id="oSend">${icon("send")}${editing&&editing.status!=="draft"?"احفظ وابعت التعديل":"مراجعة الطلب وإرساله"}</button>`,
     {full:true,act:`<button type="button" class="link" id="oSave">${editing?"احفظ":"حفظ مسودة"}</button>`});
   const lines=()=>Object.entries(sel).filter(([id])=>qtyOf(id)>0);
+  // the phone's back button doesn't drop an order in progress on the first press
+  sh.closest(".scrim")._guard=()=>lines().length||extras.length?"دوس رجوع تاني علشان تقفل الطلب من غير ما تحفظه":null;
   // what this customer usually takes (how many of his orders had it), shown first
   const USUAL="بياخد عادةً";
   const usual=()=>{const cid=$("#oc").value;if(!cid)return[];const n={};
@@ -1236,7 +1299,7 @@ function orderEditor(init){
       ${cols.length||lts.length?`<div class="opk">${cols.length?`<button class="pkb ${l.color?"on":""}" data-pk="${ref}|col" aria-expanded="${open==="col"}">${l.color?`لون: ${esc(l.color)}`:"اختار اللون"}${icon("down")}</button>`:""}
         ${lts.length?`<button class="pkb ${l.light?"on":""}" data-pk="${ref}|lt" aria-expanded="${open==="lt"}">${l.light?`إضاءة: ${esc(l.light)}`:"اختار الإضاءة"}${icon("down")}</button>`:""}</div>`:""}
       ${open?`<div class="ochips">${(open==="col"?cols:lts).map(c=>`<button class="chip" data-${open==="col"?"col":"lt"}="${ref}|${esc(c)}" aria-pressed="${(open==="col"?l.color:l.light)===c}">${esc(c)}</button>`).join("")}</div>`:""}
-      ${l.note||noteOpen.has(ref)?`<input class="inp lnote" data-note="${ref}" value="${esc(l.note)}" placeholder="ملحوظة على السطر ده (تبديل، لون تاني…)">`:`<button type="button" class="link sm" data-addnote="${ref}">+ ملحوظة</button>`}</div>`};
+      ${l.note||noteOpen.has(ref)?`<textarea class="inp lnote grow" data-note="${ref}" rows="${Math.max(2,String(l.note||"").split("\n").length)}" placeholder="ملحوظة على السطر ده (تبديل، لون تاني…)">${esc(l.note)}</textarea>`:`<button type="button" class="link sm" data-addnote="${ref}">+ ملحوظة</button>`}</div>`};
   const summary=x=>x.ls.filter(l=>l.n>0).map(l=>`<span class="num">${l.n}</span> ${UN[l.u]}${l.color?` · ${esc(l.color)}`:""}${l.light?` · ${esc(l.light)}`:""}`).join(" + ");
   const row=p=>{const x=sel[p.id],n=qtyOf(p.id),open=n&&openId===p.id;
     const head=`<button class="thumb" data-zoom="${p.id}" aria-label="كبّر الصورة">${imgHTML(p)}</button>
@@ -1264,7 +1327,7 @@ function orderEditor(init){
     const us=usual();if(cat===USUAL&&!us.length)cat="الكل";
     $("#pcats").innerHTML=[...(us.length?[USUAL]:[]),...catsOf(co)].map(c=>`<button class="chip ${c===USUAL?"usual":""}" data-cat="${esc(c)}" aria-pressed="${c===cat}">${c===USUAL?"★ ":""}${c==="الكل"?"كل الأقسام":esc(c)}</button>`).join("");
     const list=picked?lines().map(([id])=>prod(id)).filter(Boolean):cat===USUAL&&!q?us:findProducts(co,cat,q);
-    $("#plist").innerHTML=list.map(row).join("")||`<div class="empty">${picked?"لسه ما اخترتش حاجة":"مفيش منتج بالاسم ده"}</div>`;
+    if(list.length)drawRows($("#plist"),list,row);else{clearRows($("#plist"));$("#plist").innerHTML=`<div class="empty">${picked?"لسه ما اخترتش حاجة":"مفيش منتج بالاسم ده"}</div>`}
     $("#exl").innerHTML=extras.map((e,i)=>`<div class="row"><span class="main t">${esc(e.name)}</span><span class="num">× ${e.qty}</span><button class="link" data-xadd="${i}">ضيفه للقايمة</button><button class="link" data-xr="${i}">شيل</button></div>`).join("");
     sums()};
   // redraw only the touched row so the list doesn't jump while tapping
@@ -1301,7 +1364,7 @@ function orderEditor(init){
     const pe=e.target.closest("[data-per]");if(pe){const id=pe.dataset.per,n=Math.max(0,parseInt(pe.value)||0);sel[id].per=n;if(n)S.carton[id]=n;redraw(id)}});
   // the note is kept as it's typed, without redrawing the row (that would close the keyboard)
   sh.addEventListener("input",e=>{const nt=e.target.closest("[data-note]");if(nt)L(nt.dataset.note).note=nt.value});
-  $("#pq").oninput=e=>{q=e.target.value.trim();if(q)picked=false;drawList()};
+  let pqt;$("#pq").oninput=e=>{clearTimeout(pqt);pqt=setTimeout(()=>{q=e.target.value.trim();if(q)picked=false;drawList()},180)};
   const onCat=()=>{if(sh.isConnected)drawList();else document.removeEventListener("catchange",onCat)};document.addEventListener("catchange",onCat);
   if(editing){if(discMode==="amt")$("#odiscA").value=editing.discAmt||"";else $("#odisc").value=editing.disc||""}
   $("#oDisc").onclick=()=>{const m=$("#omoney");m.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>$("#odisc").focus({preventScroll:true}),350)};
@@ -1464,7 +1527,7 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
     ${dateField("pd",p?p.date:Date.now())}
     <div class="inrow" style="align-items:center"><button type="button" class="chip" id="pold" aria-pressed="${!!(p&&p.forDate)}" style="flex:none">دفعة قديمة</button>
       <label class="f" id="pforL" ${p&&p.forDate?"":"hidden"} style="flex-direction:row;align-items:center;gap:8px">عن يوم<input class="inp num" id="pfor" type="date" max="${isoDay(Date.now())}" value="${p&&p.forDate?isoDay(p.forDate):""}" style="direction:ltr"></label></div>
-    <label class="f">ملاحظة (اختياري)<input class="inp" id="pn" value="${esc(p?p.note:"")}" placeholder="كاش، تحويل…"></label>`,
+    <label class="f">ملاحظة (اختياري)<textarea class="inp grow" id="pn" rows="${Math.max(2,String(p&&p.note||"").split("\n").length)}" placeholder="كاش، تحويل…">${esc(p?p.note:"")}</textarea></label>`,
     p?`<div class="btns"><button class="btn primary" id="ps">احفظ التعديل</button><button class="btn ghost" id="pdl" style="flex:0 0 auto">امسح</button></div>`
      :`<div class="btns"><button class="btn primary" id="ps">سجّل التحصيل</button><button class="btn wa" id="psh">سجّل وابعته</button></div>`);
   if(p){sh.querySelector("#p1txt").onclick=()=>shareText(payMessage(p));sh.querySelector("#p1img").onclick=()=>sharePayImage(p)}
@@ -1521,7 +1584,7 @@ function handoverSheet(hid){const h=hid?S.handovers.find(x=>x.id===hid):null;con
   const sh=sheet(h?"تعديل تسليم":"سلّمت للشركة",`${h?"":`<div class="card"><span class="hint">معاك دلوقتي</span><div style="font-size:24px;font-weight:800">${money(cih)} ج</div></div>`}
     <label class="f">سلّمت كام؟<input class="inp num" id="ha" type="number" inputmode="decimal" value="${h?h.amount:cih}" style="text-align:right;direction:rtl"></label>
     ${dateField("hd",h?h.date:Date.now())}
-    <label class="f">ملاحظة (اختياري)<input class="inp" id="hn" value="${esc(h?h.note:"")}" placeholder="سلمت لمين، رقم الإيصال…"></label>`,
+    <label class="f">ملاحظة (اختياري)<textarea class="inp grow" id="hn" rows="${Math.max(2,String(h&&h.note||"").split("\n").length)}" placeholder="سلمت لمين، رقم الإيصال…">${esc(h?h.note:"")}</textarea></label>`,
     `<button class="btn primary block" id="hs">${h?"احفظ التعديل":"سجّل التسليم"}</button>${h?`<button class="btn ghost block" id="hdl">امسح التسليم ده</button>`:""}`);
   bindDate("hd");
   sh.querySelector("#hs").onclick=()=>{const a=parseFloat($("#ha").value);if(!(a>0))return toast("اكتب المبلغ");
@@ -1548,7 +1611,7 @@ function adjustSheet(cid,adjId){const a=adjId?S.adjusts.find(x=>x.id===adjId):nu
     <label class="f"><span id="ajl"></span><input class="inp num" id="aja" type="number" inputmode="decimal" placeholder="0" value="${a?Math.abs(a.amount):""}" style="text-align:right;direction:rtl"></label>
     <div class="hint" id="ajr"></div>
     ${dateField("ajd",a?a.date:Date.now())}
-    <label class="f">ملحوظة (اختياري)<input class="inp" id="ajn" value="${esc(a?a.note:"")}" placeholder="بضاعة اتسلمت، حسب كشف الشركة…"></label>`,
+    <label class="f">ملحوظة (اختياري)<textarea class="inp grow" id="ajn" rows="${Math.max(2,String(a&&a.note||"").split("\n").length)}" placeholder="بضاعة اتسلمت، حسب كشف الشركة…">${esc(a?a.note:"")}</textarea></label>`,
     `<button class="btn primary block" id="ajs">احفظ</button>${a?`<button class="btn ghost block" id="ajdl">امسح الحركة دي</button>`:""}`);
   const base=a?cur-a.amount:cur; // balance without this line, when editing it
   const delta=()=>{const v=parseFloat($("#aja").value);if(!(v>=0))return null;return mode==="set"?v-base:mode==="add"?v:-v};
@@ -1724,6 +1787,7 @@ function licGate(){const st=licState();let g=$("#licGate");if(st==="ok"){if(g)g.
 function trialBar(){if(!TRIAL)return"";const l=licGet();if(!l||!l.until)return"";const left=Math.ceil((l.until-Date.now())/DAY);
   return left<=2&&left>0?`<div class="demo">التجربة هتخلص يوم ${esc(fmtDay(l.until))}</div>`:""}
 
+document.addEventListener("input",e=>{const t=e.target;if(t.classList&&t.classList.contains("grow")){t.style.height="auto";t.style.height=t.scrollHeight+2+"px"}});
 /* ---------- boot ---------- */
 render();loadPhotos();
 {const sp=$("#splash");if(sp){setTimeout(()=>{sp.classList.add("out");setTimeout(()=>sp.remove(),320)},450)}}setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);
