@@ -1,10 +1,16 @@
 {
   // The trial copy for other reps: same files, its own address (mandoub-trial.<account>.workers.dev).
   // A hostname with "trial" turns on the activation code; codes live in public/licenses.json.
+  // It shares the accounts database with the main copy (each account sees only its own data).
   // Deploy: npx wrangler deploy -c wrangler.trial.jsonc
   "name": "mandoub-trial",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
   "assets": {
-    "directory": "./public"
-  }
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "salesgo", "database_id": "PASTE-THE-ID-FROM-wrangler-d1-create" }
+  ]
 }
