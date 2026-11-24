@@ -1,4 +1,4 @@
-const CACHE="mandoub-v41";
+const CACHE="mandoub-v42";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png","icon-maskable-192.png","icon-32.png","apple-touch-icon.png","logo-light.svg","logo-dark.svg","logo-stacked-light.svg","logo-stacked-dark.svg","symbol.svg"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL.map(u=>new Request(u,{cache:"reload"})))}).then(()=>self.skipWaiting()))});
@@ -8,6 +8,7 @@ self.addEventListener("fetch",e=>{
   if(e.request.method!=="GET")return;
   const url=new URL(e.request.url);
   if(url.searchParams.has("check"))return; // the app's "is there a newer version?" check goes straight to the network
+  if(url.origin===location.origin&&url.pathname.startsWith("/api/"))return; // accounts and sync: always live, never cached
   if(url.origin===location.origin&&url.pathname.endsWith("/"+PHOTOS)){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>put(e.request,res))));
   } else if(url.origin===location.origin){
