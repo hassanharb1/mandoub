@@ -1,0 +1,100 @@
+{
+  "brand": {
+    "product": "SalesGo",
+    "arabicPronunciation": "سيلز جو",
+    "company": "MESTK",
+    "endorsement": "by MESTK",
+    "logoType": "Custom outlined lettering from final approved reference",
+    "original": {
+      "charcoal": "#282825",
+      "burntOrange": "#BD572F",
+      "warmCream": "#F5F0E7"
+    }
+  },
+  "themes": {
+    "light": {
+      "bg": "#F5F0E7",
+      "surface": "#FFFFFF",
+      "raised": "#EDE5D9",
+      "text": "#282825",
+      "muted": "#65615A",
+      "border": "#93887A",
+      "divider": "#DED5C8",
+      "brand": "#BD572F",
+      "action": "#A74724",
+      "onAction": "#FFFFFF",
+      "success": "#236444",
+      "successBg": "#E6F1E8",
+      "warning": "#805300",
+      "warningBg": "#FFF0C7",
+      "error": "#B3262E",
+      "errorBg": "#FBE9E8",
+      "info": "#245B86",
+      "infoBg": "#E6EFF9"
+    },
+    "dark": {
+      "bg": "#1C1C1A",
+      "surface": "#282825",
+      "raised": "#34342F",
+      "text": "#F5F0E7",
+      "muted": "#C6BDB0",
+      "border": "#8F877A",
+      "divider": "#4A4841",
+      "brand": "#F29A72",
+      "action": "#F29A72",
+      "onAction": "#282825",
+      "success": "#94D7AA",
+      "successBg": "#22382C",
+      "warning": "#F2C46D",
+      "warningBg": "#3C311D",
+      "error": "#FFB3B3",
+      "errorBg": "#43262A",
+      "info": "#AACDF2",
+      "infoBg": "#243445"
+    }
+  },
+  "typography": {
+    "interfaceFamily": "Cairo",
+    "body": 16,
+    "bodyLineHeight": 26,
+    "screenTitle": 26,
+    "sectionTitle": 20,
+    "caption": 14,
+    "heroMoney": 42,
+    "cardMoney": 26,
+    "numbers": {
+      "direction": "ltr",
+      "features": [
+        "tnum",
+        "lnum"
+      ]
+    }
+  },
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32
+  ],
+  "radius": {
+    "button": 12,
+    "card": 16,
+    "chip": 10
+  },
+  "touch": {
+    "minimum": 44,
+    "preferred": 48,
+    "buttonHeight": 52
+  },
+  "logo": {
+    "minimumLockupWidth": 240,
+    "minimumSymbolSize": 48,
+    "clearSpaceFractionOfSymbolHeight": 0.25
+  },
+  "maskable": {
+    "insetFraction": 0.21,
+    "maximumSafeCircleRadiusFraction": 0.4
+  }
+}

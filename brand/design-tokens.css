@@ -1,0 +1,55 @@
+/* SalesGo by MESTK: Arabic RTL light/dark design tokens. */
+@font-face { font-family: Cairo; src: url('../07_Fonts/Cairo-Variable.ttf') format('truetype'); font-weight: 200 1000; font-style: normal; font-display: swap; }
+:root, [data-theme="light"] {
+  --bg: #F5F0E7;
+  --surface: #FFFFFF;
+  --raised: #EDE5D9;
+  --text: #282825;
+  --muted: #65615A;
+  --border: #93887A;
+  --divider: #DED5C8;
+  --brand: #BD572F;
+  --action: #A74724;
+  --onAction: #FFFFFF;
+  --success: #236444;
+  --successBg: #E6F1E8;
+  --warning: #805300;
+  --warningBg: #FFF0C7;
+  --error: #B3262E;
+  --errorBg: #FBE9E8;
+  --info: #245B86;
+  --infoBg: #E6EFF9;
+}
+[data-theme="dark"] {
+  --bg: #1C1C1A;
+  --surface: #282825;
+  --raised: #34342F;
+  --text: #F5F0E7;
+  --muted: #C6BDB0;
+  --border: #8F877A;
+  --divider: #4A4841;
+  --brand: #F29A72;
+  --action: #F29A72;
+  --onAction: #282825;
+  --success: #94D7AA;
+  --successBg: #22382C;
+  --warning: #F2C46D;
+  --warningBg: #3C311D;
+  --error: #FFB3B3;
+  --errorBg: #43262A;
+  --info: #AACDF2;
+  --infoBg: #243445;
+}
+html { direction: rtl; font-family: Cairo, sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--text); font-size: 16px; line-height: 1.625; }
+button, input, select, textarea { font: inherit; }
+button, [role="button"] { min-width: 44px; min-height: 44px; }
+.button { min-height: 52px; padding-inline: 16px; border-radius: 12px; font-weight: 700; }
+.button-primary { background: var(--action); color: var(--onAction); border: 0; }
+.button-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.card { background: var(--surface); border-radius: 16px; padding: 16px; }
+.chip { min-height: 44px; border-radius: 10px; }
+input, select, textarea { min-height: 48px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.money, .quantity, .code { direction: ltr; unicode-bidi: isolate; display: inline-block; font-variant-numeric: tabular-nums lining-nums; font-feature-settings: "tnum" 1, "lnum" 1; }
+:focus-visible { outline: 3px solid var(--action); outline-offset: 3px; }
+.sticky-order-footer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
