@@ -435,7 +435,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=43; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=44; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1976,12 +1976,24 @@ function syBadge(){const b=$("#settingsBtn");if(b)b.classList.toggle("syerr",!!(
 function syState(){if(!signedIn())return "";if(syBusy)return "بيزامن…";if(SY.held)return `فيه ${SY.held} حاجة اتمسحت مرة واحدة، مستني تأكيدك`;
   if(SY.err)return "⚠ "+SY.err;if(SY.wait)return `${SY.wait} · هيزامن لوحده لما النت يرجع${SY.last?` (آخر مزامنة ${when(SY.last)})`:""}`;
   return SY.last?`✓ آخر مزامنة ${when(SY.last)}`:"لسه ما اتزامنش"}
+let accMode="in"; // "in" = sign in, "up" = open a new account
 function accountSection(){
+  const ltr='style="direction:ltr;text-align:right"';
+  if(!signedIn()&&accMode==="up")return `<section class="sec" id="acc"><h2>حساب جديد</h2>
+    <p class="hint">اعمل حساب علشان بياناتك تتحفظ على السيرفر وتتزامن: لو الموبايل ضاع أو باظ، تدخل من أي موبايل تاني وكل حاجة ترجع.</p>
+    <label class="f">اسمك<input class="inp" id="anm" autocomplete="name" value="${esc(S.settings.rep||"")}"></label>
+    <label class="f">الإيميل<input class="inp" id="aem" type="email" autocomplete="username" inputmode="email" ${ltr}></label>
+    <label class="f">الباسورد (6 حروف أو أرقام على الأقل)<input class="inp" id="apw" type="password" autocomplete="new-password" ${ltr}></label>
+    <label class="f">اكتب الباسورد تاني<input class="inp" id="apw2" type="password" autocomplete="new-password" ${ltr}></label>
+    <p class="hint">احفظ الإيميل والباسورد عندك، هتحتاجهم لو غيّرت الموبايل.</p>
+    <button class="btn primary block" id="aup">اعمل الحساب</button><p class="hint" id="ahint"></p>
+    <button class="link" id="amode" style="margin-top:8px">عندك حساب؟ ادخل بيه</button></section>`;
   if(!signedIn())return `<section class="sec" id="acc"><h2>حسابك</h2>
     <p class="hint">ادخل بحسابك علشان بياناتك تتحفظ على السيرفر وتتزامن: لو الموبايل ضاع أو باظ، تدخل من أي موبايل تاني وكل حاجة ترجع. البرنامج بيفضل شغال من غير نت عادي.</p>
-    <label class="f">الإيميل<input class="inp" id="aem" type="email" autocomplete="username" inputmode="email" value="${esc(SY.owner||"")}" style="direction:ltr;text-align:right"></label>
-    <label class="f">الباسورد<input class="inp" id="apw" type="password" autocomplete="current-password" style="direction:ltr;text-align:right"></label>
-    <button class="btn primary block" id="ain">ادخل</button><p class="hint" id="ahint">الحساب بتاخده من MESTK.</p></section>`;
+    <label class="f">الإيميل<input class="inp" id="aem" type="email" autocomplete="username" inputmode="email" value="${esc(SY.owner||"")}" ${ltr}></label>
+    <label class="f">الباسورد<input class="inp" id="apw" type="password" autocomplete="current-password" ${ltr}></label>
+    <button class="btn primary block" id="ain">ادخل</button><p class="hint" id="ahint"></p>
+    <button class="btn ghost block" id="amode" style="margin-top:8px">معندكش حساب؟ اعمل حساب جديد</button></section>`;
   return `<section class="sec" id="acc"><h2>حسابك</h2><div class="card">
     <div class="total"><span>داخل بـ</span><span style="direction:ltr">${esc(SY.email)}</span></div>
     <div class="hint" id="ast">${esc(syState())}</div>
@@ -1989,17 +2001,25 @@ function accountSection(){
       <div class="btns"><button class="btn ghost" id="adel">امسحهم من السيرفر كمان</button><button class="btn primary" id="aback">رجّعهم</button></div>`:""}
     <div class="btns"><button class="btn ghost" id="anow">زامن دلوقتي</button><button class="btn ghost" id="aout">اخرج من الحساب</button></div></div></section>`}
 function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a){a.outerHTML=accountSection();bindAccount(sh)}};
-  const ain=sh.querySelector("#ain");if(ain)ain.onclick=async()=>{const email=sh.querySelector("#aem").value.trim().toLowerCase(),password=sh.querySelector("#apw").value;
-    if(!email||!password)return toast("اكتب الإيميل والباسورد");
+  const md=sh.querySelector("#amode");if(md)md.onclick=()=>{accMode=accMode==="up"?"in":"up";redraw()};
+  // opening an account and signing in end the same way: keep a copy of the phone's data, then sync
+  const enter=async(btn,busy,label,path,body)=>{const email=body.email;
     const real=!S.demo&&(S.customers.length||S.orders.length||S.payments.length);
     if(real&&SY.owner&&SY.owner!==email)return toast(`البيانات اللي على الموبايل ده بتاعة حساب ${SY.owner}. ادخل بيه، أو خد نسخة احتياطية وامسحها الأول`);
-    ain.disabled=true;ain.textContent="بدخل…";
-    try{const r=await api("/api/login",{email,password});
+    btn.disabled=true;btn.textContent=busy;
+    try{const r=await api(path,body);
       if(real){try{localStorage.setItem("mandoub.presync",JSON.stringify(S))}catch(e){}} // a copy of the phone's data from before the first sync
       if(S.demo){const keep={...S.settings};S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:keep,products:[],carton:S.carton||{},cat:S.cat,customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save()}
       SY={token:r.token,email:r.email,name:r.name,owner:r.email,since:0,known:{}};sySave();redraw();toast("دخلت ✓ ببعت وأستلم البيانات…");
-      await syncNow();redraw();toast(SY.err?SY.err:"✓ بياناتك اتزامنت");go(route.v,route.arg)}
-    catch(e){ain.disabled=false;ain.textContent="ادخل";sh.querySelector("#ahint").textContent=e.message}};
+      accMode="in";await syncNow();redraw();toast(SY.err?SY.err:"✓ بياناتك اتزامنت");go(route.v,route.arg)}
+    catch(e){btn.disabled=false;btn.textContent=label;const h=sh.querySelector("#ahint");if(h){h.textContent=e.message;h.style.color="var(--bad)"}}};
+  const ain=sh.querySelector("#ain");if(ain)ain.onclick=()=>{const email=sh.querySelector("#aem").value.trim().toLowerCase(),password=sh.querySelector("#apw").value;
+    if(!email||!password)return toast("اكتب الإيميل والباسورد");enter(ain,"بدخل…","ادخل","/api/login",{email,password})};
+  const aup=sh.querySelector("#aup");if(aup)aup.onclick=()=>{const email=sh.querySelector("#aem").value.trim().toLowerCase(),password=sh.querySelector("#apw").value,name=sh.querySelector("#anm").value.trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return toast("اكتب إيميل صحيح");
+    if(password.length<6)return toast("الباسورد لازم 6 حروف أو أرقام على الأقل");
+    if(password!==sh.querySelector("#apw2").value)return toast("الباسورد مش زي بعضه في الخانتين");
+    enter(aup,"بعمل الحساب…","اعمل الحساب","/api/signup",{email,password,name})};
   const an=sh.querySelector("#anow");if(an)an.onclick=async()=>{an.disabled=true;an.textContent="بيزامن…";await syncNow();redraw()};
   const ao=sh.querySelector("#aout");if(ao)ao.onclick=()=>{if(!ao.dataset.armed){ao.dataset.armed=1;ao.textContent="متأكد؟ بياناتك هتفضل على الموبايل";return}
     api("/api/logout",{}).catch(()=>{});SY={owner:SY.owner};sySave();syBadge();redraw();toast("خرجت من الحساب")};

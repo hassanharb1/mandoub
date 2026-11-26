@@ -29,3 +29,9 @@ CREATE TABLE IF NOT EXISTS records (
   PRIMARY KEY (user_id, kind, id)
 );
 CREATE INDEX IF NOT EXISTS records_pull ON records (user_id, sv);
+-- one row per account opened from the app, to cap sign-ups per address per day
+CREATE TABLE IF NOT EXISTS signups (
+  ip TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS signups_ip ON signups (ip, at);
