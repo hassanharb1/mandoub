@@ -59,3 +59,9 @@ CREATE TABLE IF NOT EXISTS push_plan (
   updated  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS push_plan_due ON push_plan (next_due);
+-- the recovery code for a forgotten password (no email): one per account, hash only, replaced every time it is used or remade
+CREATE TABLE IF NOT EXISTS recovery (
+  user_id TEXT PRIMARY KEY,
+  hash    TEXT NOT NULL,
+  created INTEGER NOT NULL
+);
