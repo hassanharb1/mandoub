@@ -11,6 +11,6 @@
     "binding": "ASSETS"
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "salesgo", "database_id": "PASTE-THE-ID-FROM-wrangler-d1-create" }
+    { "binding": "DB", "database_name": "salesgo", "database_id": "b3aa7c8b-38da-419e-b192-0bdd23006e65" }
   ]
 }
