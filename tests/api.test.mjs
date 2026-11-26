@@ -145,3 +145,46 @@ test("push: a test push and the cron reminders arrive encrypted, once a day per 
   const left = JSON.parse(wr(["d1", "execute", "salesgo", "--local", "--persist-to", dir, "--json", "--command", `SELECT endpoint FROM push_subs WHERE user_id = '${uid}'`]).stdout)[0].results;
   assert.ok(!left.some(r => r.endpoint.includes("gone")), "a 410 subscription was kept");
 });
+
+test("forgotten password: the recovery code resets it once, wrong codes fail, and changing the password signs other phones out", async () => {
+  const e = email(), up = await post("/api/signup", { email: e, password: "abc123" });
+  const code = up.body.recovery; assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.equal((await get("/api/me", up.body.token)).body.recovery, 1);
+  assert.equal((await post("/api/reset", { email: e, code: "AAAA-BBBB-CCCC", password: "new123" })).status, 401);
+  assert.equal((await post("/api/reset", { email: e, code, password: "123" })).status, 400);
+  const r = await post("/api/reset", { email: e, code: code.toLowerCase().replace(/-/g, " "), password: "new123" });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.ok(r.body.token); assert.ok(r.body.recovery && r.body.recovery !== code);
+  assert.equal((await post("/api/sync", { since: 0 }, up.body.token)).status, 401, "the old session survived a reset");
+  assert.equal((await post("/api/reset", { email: e, code, password: "x12345" })).status, 401, "a used code worked twice");
+  assert.equal((await post("/api/login", { email: e, password: "abc123" })).status, 401);
+  const t2 = (await post("/api/login", { email: e, password: "new123" })).body.token, t3 = r.body.token;
+  assert.equal((await post("/api/password", { old: "wrong", password: "zzz999" }, t2)).status, 401);
+  assert.equal((await post("/api/password", { old: "new123", password: "zzz999" }, t2)).status, 200);
+  assert.equal((await post("/api/sync", { since: 0 }, t2)).status, 200, "this phone was signed out");
+  assert.equal((await post("/api/sync", { since: 0 }, t3)).status, 401, "the other phone stayed in");
+  const fresh = (await post("/api/recovery", {}, t2)).body.recovery;
+  assert.equal((await post("/api/reset", { email: e, code: r.body.recovery, password: "abc999" })).status, 401, "the replaced code still works");
+  assert.equal((await post("/api/reset", { email: e, code: fresh, password: "abc999" })).status, 200);
+});
+
+test("in the app: sign up shows the code; «نسيت الباسورد؟» with it signs back in", async () => {
+  const { browser } = await import("./helpers.mjs"); const b = await browser();
+  const page = await (await b.newContext({ viewport: { width: 390, height: 800 }, serviceWorkers: "block" })).newPage();
+  const errs = []; page.on("pageerror", x => errs.push(x.message)); page.context().on("page", p => { if (p !== page) p.close().catch(() => {}); });
+  await page.goto(base + "/"); await wait(1200);
+  const e = email(), c = s => page.evaluate(q => document.querySelector(q).click(), s);
+  await c("#settingsBtn"); await wait(300); await c("#amode"); await wait(200);
+  await page.fill("#aem", e); await page.fill("#apw", "abc123"); await page.fill("#apw2", "abc123"); await c("#aup");
+  await page.waitForSelector("#scrim2 .num", { timeout: 15000 });
+  const code = (await page.evaluate(() => document.querySelector("#scrim2 .num").textContent)).trim();
+  assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  await page.evaluate(() => document.querySelector("#scrim2 [data-close]").click()); await wait(200);
+  await c("#aout"); await c("#aout"); await wait(500);
+  await c('[data-amode="reset"]'); await wait(200);
+  await page.fill("#aem", e); await page.fill("#acode", code); await page.fill("#apw", "new123"); await page.fill("#apw2", "new123"); await c("#arst");
+  await page.waitForSelector("#scrim2 .num", { timeout: 15000 });
+  assert.match(await page.evaluate(() => document.querySelector("#acc").innerText), new RegExp(e.replace(/[.]/g, "\\.")));
+  assert.equal((await post("/api/login", { email: e, password: "new123" })).status, 200);
+  assert.deepEqual(errs, []);
+  await b.close();
+});

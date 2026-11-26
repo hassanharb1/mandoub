@@ -44,11 +44,56 @@ async function login(req, env) {
   return newSession(env, u, [env.DB.prepare("UPDATE users SET fails = 0, lock_until = 0 WHERE id = ?").bind(u.id)]);
 }
 
-async function newSession(env, u, extra = []) {
+async function newSession(env, u, extra = [], more = {}) {
   const token = b64(crypto.getRandomValues(new Uint8Array(32))), now = Date.now();
   await env.DB.batch([...extra,
     env.DB.prepare("INSERT INTO sessions (token_hash, user_id, created, seen) VALUES (?, ?, ?, ?)").bind(await sha256(token), u.id, now, now)]);
-  return json({ token, email: u.email, name: u.name || "" });
+  return json({ token, email: u.email, name: u.name || "", ...more });
+}
+
+/* ---------- forgotten passwords, with no email: a recovery code ----------
+   Each account has one code (shown once: at sign-up, or when the rep asks for a new one in Settings), kept only as a hash.
+   «نسيت الباسورد؟» = email + code + new password → signed in, all other sessions out, and a fresh code (the old one is spent).
+   Wrong codes count against the same lock as wrong passwords. Lost the code too → MESTK resets it with tools/account.mjs. */
+const CODE_ABC = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+function recoveryCode() { const r = crypto.getRandomValues(new Uint8Array(12)); let c = ""; r.forEach((x, i) => { c += CODE_ABC[x % CODE_ABC.length] + (i % 4 === 3 && i < 11 ? "-" : ""); }); return c; }
+const normCode = c => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+async function newRecovery(env, uid) {
+  const code = recoveryCode();
+  await env.DB.prepare("INSERT INTO recovery (user_id, hash, created) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET hash = excluded.hash, created = excluded.created")
+    .bind(uid, await hashPass(normCode(code)), Date.now()).run();
+  return code;
+}
+async function reset(req, env) {
+  const { email, code, password } = await req.json().catch(() => ({}));
+  const e = String(email || "").trim().toLowerCase(), pw = String(password || "");
+  if (!e || !code) return json({ error: "اكتب الإيميل وكود الاسترجاع" }, 400);
+  if (pw.length < 6) return json({ error: "الباسورد الجديد لازم 6 حروف أو أرقام على الأقل" }, 400);
+  const u = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(e).first(), now = Date.now();
+  if (u && u.lock_until > now) return json({ error: "الحساب اتقفل ربع ساعة بسبب محاولات غلط كتير. جرّب بعد شوية" }, 429);
+  const r = u && await env.DB.prepare("SELECT hash FROM recovery WHERE user_id = ?").bind(u.id).first();
+  if (!u || !r || !(await checkPass(normCode(code), r.hash))) {
+    if (u) await env.DB.prepare("UPDATE users SET fails = fails + 1, lock_until = CASE WHEN fails + 1 >= ? THEN ? ELSE 0 END WHERE id = ?").bind(LOCK_AFTER, now + LOCK_MS, u.id).run();
+    return json({ error: "الإيميل أو كود الاسترجاع غلط" }, 401);
+  }
+  if (u.off) return json({ error: "الحساب ده متوقف. كلّم MESTK" }, 403);
+  const fresh = recoveryCode();
+  return newSession(env, u, [
+    env.DB.prepare("UPDATE users SET pass = ?, fails = 0, lock_until = 0 WHERE id = ?").bind(await hashPass(pw), u.id),
+    env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(u.id),
+    env.DB.prepare("UPDATE recovery SET hash = ?, created = ? WHERE user_id = ?").bind(await hashPass(normCode(fresh)), now, u.id),
+  ], { recovery: fresh });
+}
+async function changePass(req, env, a) {
+  const { old, password } = await req.json().catch(() => ({}));
+  const pw = String(password || "");
+  if (pw.length < 6) return json({ error: "الباسورد الجديد لازم 6 حروف أو أرقام على الأقل" }, 400);
+  const u = await env.DB.prepare("SELECT pass FROM users WHERE id = ?").bind(a.uid).first();
+  if (!u || !(await checkPass(String(old || ""), u.pass))) return json({ error: "الباسورد الحالي غلط" }, 401);
+  // the other phones are signed out; this one stays in
+  await env.DB.batch([env.DB.prepare("UPDATE users SET pass = ? WHERE id = ?").bind(await hashPass(pw), a.uid),
+    env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?").bind(a.uid, a.h)]);
+  return json({ ok: true });
 }
 
 /* POST /api/signup {email, password, name}: anyone can open an account (each account sees only its own data).
@@ -64,11 +109,12 @@ async function signup(req, env) {
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM signups WHERE ip = ? AND at > ?").bind(ip, now - 864e5).first();
   if (n && n.n >= (+env.SIGNUPS_PER_IP || SIGNUPS_PER_IP)) return json({ error: "اتعمل حسابات كتير من النت ده النهارده. جرّب بكرة" }, 429);
   if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(e).first()) return json({ error: "الإيميل ده عليه حساب قبل كده. ادخل بيه" }, 409);
-  const u = { id: crypto.randomUUID(), email: e, name: nm };
+  const u = { id: crypto.randomUUID(), email: e, name: nm }, code = recoveryCode();
   return newSession(env, u, [
+    env.DB.prepare("INSERT INTO recovery (user_id, hash, created) VALUES (?, ?, ?)").bind(u.id, await hashPass(normCode(code)), now),
     env.DB.prepare("INSERT INTO users (id, email, pass, name, created) VALUES (?, ?, ?, ?, ?)").bind(u.id, e, await hashPass(pw), nm, now),
     env.DB.prepare("INSERT INTO signups (ip, at) VALUES (?, ?)").bind(ip, now),
-  ]);
+  ], { recovery: code });
 }
 
 async function auth(req, env) {
@@ -190,6 +236,7 @@ export default {
     try {
       if (req.method === "POST" && url.pathname === "/api/login") return await login(req, env);
       if (req.method === "POST" && url.pathname === "/api/signup") return await signup(req, env);
+      if (req.method === "POST" && url.pathname === "/api/reset") return await reset(req, env);
       const z = url.pathname.match(/^\/api\/z\/([A-Za-z0-9_-]+)(\/step)?$/);
       if (z) {
         const uid = await linkUser(env, z[1]);
@@ -227,7 +274,9 @@ export default {
       }
       if (req.method === "POST" && url.pathname === "/api/link/off") { await env.DB.prepare("DELETE FROM links WHERE user_id = ?").bind(a.uid).run(); return json({ ok: true }); }
       if (req.method === "GET" && url.pathname === "/api/push/key") return json({ key: env.VAPID_PUBLIC || "" });
-      if (req.method === "GET" && url.pathname === "/api/me") return json(await env.DB.prepare("SELECT email, name FROM users WHERE id = ?").bind(a.uid).first() || {});
+      if (req.method === "GET" && url.pathname === "/api/me") return json(await env.DB.prepare("SELECT email, name, EXISTS (SELECT 1 FROM recovery r WHERE r.user_id = users.id) AS recovery FROM users WHERE id = ?").bind(a.uid).first() || {});
+      if (req.method === "POST" && url.pathname === "/api/recovery") return json({ recovery: await newRecovery(env, a.uid) });
+      if (req.method === "POST" && url.pathname === "/api/password") return await changePass(req, env, a);
       if (req.method === "POST" && url.pathname === "/api/logout") {
         await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(a.h).run();
         return json({ ok: true });

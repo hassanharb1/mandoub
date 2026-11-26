@@ -435,7 +435,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=47; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=48; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -2014,6 +2014,14 @@ function syState(){if(!signedIn())return "";if(syBusy)return "بيزامن…";i
 let accMode="in"; // "in" = sign in, "up" = open a new account
 function accountSection(){
   const ltr='style="direction:ltr;text-align:right"';
+  if(!signedIn()&&accMode==="reset")return `<section class="sec" id="acc"><h2>نسيت الباسورد</h2>
+    <p class="hint">اكتب إيميلك و«كود الاسترجاع» اللي البرنامج إداهولك لما عملت الحساب، واختار باسورد جديد.</p>
+    <label class="f">الإيميل<input class="inp" id="aem" type="email" autocomplete="username" inputmode="email" value="${esc(SY.owner||"")}" ${ltr}></label>
+    <label class="f">كود الاسترجاع<input class="inp" id="acode" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX" ${ltr}></label>
+    <label class="f">الباسورد الجديد (6 حروف أو أرقام على الأقل)<input class="inp" id="apw" type="password" autocomplete="new-password" ${ltr}></label>
+    <label class="f">اكتب الباسورد الجديد تاني<input class="inp" id="apw2" type="password" autocomplete="new-password" ${ltr}></label>
+    <button class="btn primary block" id="arst">غيّر الباسورد وادخل</button><p class="hint" id="ahint">ضاع الكود كمان؟ كلّم MESTK وهيرجّعولك الحساب.</p>
+    <button class="link" data-amode="in" style="margin-top:8px">رجوع للدخول</button></section>`;
   if(!signedIn()&&accMode==="up")return `<section class="sec" id="acc"><h2>حساب جديد</h2>
     <p class="hint">اعمل حساب علشان بياناتك تتحفظ على السيرفر وتتزامن: لو الموبايل ضاع أو باظ، تدخل من أي موبايل تاني وكل حاجة ترجع.</p>
     <label class="f">اسمك<input class="inp" id="anm" autocomplete="name" value="${esc(S.settings.rep||"")}"></label>
@@ -2028,16 +2036,35 @@ function accountSection(){
     <label class="f">الإيميل<input class="inp" id="aem" type="email" autocomplete="username" inputmode="email" value="${esc(SY.owner||"")}" ${ltr}></label>
     <label class="f">الباسورد<input class="inp" id="apw" type="password" autocomplete="current-password" ${ltr}></label>
     <button class="btn primary block" id="ain">ادخل</button><p class="hint" id="ahint"></p>
+    <button class="link" data-amode="reset" style="margin-bottom:8px">نسيت الباسورد؟</button>
     <button class="btn ghost block" id="amode" style="margin-top:8px">معندكش حساب؟ اعمل حساب جديد</button></section>`;
   return `<section class="sec" id="acc"><h2>حسابك</h2><div class="card">
     <div class="total"><span>داخل بـ</span><span style="direction:ltr">${esc(SY.email)}</span></div>
     <div class="hint" id="ast">${esc(syState())}</div>
     ${SY.held?`<p class="hint" style="color:var(--bad)">اتمسح ${SY.held} حاجة من على الموبايل مرة واحدة. لو ده مقصود ابعته للسيرفر، ولو لأ رجّعهم من السيرفر.</p>
       <div class="btns"><button class="btn ghost" id="adel">امسحهم من السيرفر كمان</button><button class="btn primary" id="aback">رجّعهم</button></div>`:""}
-    <div class="btns"><button class="btn ghost" id="anow">زامن دلوقتي</button><button class="btn ghost" id="aout">اخرج من الحساب</button></div></div></section>`}
+    ${SY.rec===0?`<p class="hint" style="color:var(--warn)">معندكش «كود استرجاع» لسه. اعمله واحفظه، علشان لو نسيت الباسورد.</p>`:""}
+    <div class="btns"><button class="btn ghost" id="anow">زامن دلوقتي</button><button class="btn ghost" id="aout">اخرج من الحساب</button></div>
+    <div class="btns"><button class="btn ghost" id="apass">غيّر الباسورد</button><button class="btn ${SY.rec===0?"primary":"ghost"}" id="arec">${SY.rec===0?"اعمل كود استرجاع":"كود استرجاع جديد"}</button></div></div></section>`}
+// the recovery code, shown once: save it (a screenshot, or WhatsApp to yourself)
+function recoverySheet(code){const sh=sheet("كود الاسترجاع",`<p class="hint">لو نسيت الباسورد، هتدخل بإيميلك والكود ده. صوّره أو ابعته لنفسك واتساب دلوقتي، لأنه مش هيظهر تاني.</p>
+    <div class="card" style="text-align:center"><div class="num" style="font-size:28px;font-weight:800;letter-spacing:2px">${esc(code)}</div><div class="hint">${esc(SY.email||"")}</div></div>`,
+    `<div class="btns"><button class="btn wa" id="rcwa">ابعته لنفسي واتساب</button><button class="btn ghost" id="rccp">انسخه</button></div><button class="btn primary block" data-close>حفظته ✓</button>`,{stack:!!$("#scrim")});
+  sh.querySelector("#rcwa").onclick=()=>window.open(`https://wa.me/?text=${encodeURIComponent(`كود استرجاع حساب SalesGo (${SY.email||""}):\n${code}\nمتديهوش لحد.`)}`,"_blank","noopener");
+  sh.querySelector("#rccp").onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(code):Promise.reject()).then(()=>toast("اتنسخ"),()=>toast(code))}}
+function passSheet(){const ltr='style="direction:ltr;text-align:right"';
+  const sh=sheet("غيّر الباسورد",`<label class="f">الباسورد الحالي<input class="inp" id="pp0" type="password" autocomplete="current-password" ${ltr}></label>
+    <label class="f">الباسورد الجديد (6 على الأقل)<input class="inp" id="pp1" type="password" autocomplete="new-password" ${ltr}></label>
+    <label class="f">اكتب الجديد تاني<input class="inp" id="pp2" type="password" autocomplete="new-password" ${ltr}></label>
+    <p class="hint">الموبايلات التانية الداخلة بحسابك هتطلب الدخول تاني.</p>`,`<button class="btn primary block" id="ppgo">غيّر الباسورد</button>`,{stack:!!$("#scrim")});
+  sh.querySelector("#ppgo").onclick=async()=>{const a=sh.querySelector("#pp1").value;if(a.length<6)return toast("الباسورد الجديد لازم 6 على الأقل");if(a!==sh.querySelector("#pp2").value)return toast("الباسورد الجديد مش زي بعضه");
+    try{await api("/api/password",{old:sh.querySelector("#pp0").value,password:a});closeSheet();toast("الباسورد اتغير ✓")}catch(e){toast(e.message)}}}
 function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a){a.outerHTML=accountSection();bindAccount(sh)}
     const z=sh.querySelector("#zsec");if(z){z.outerHTML=zSection();bindZ(sh)}};
   const md=sh.querySelector("#amode");if(md)md.onclick=()=>{accMode=accMode==="up"?"in":"up";redraw()};
+  sh.querySelectorAll("[data-amode]").forEach(b=>b.onclick=()=>{accMode=b.dataset.amode;redraw()});
+  // does this account have a recovery code? (accounts made before v48 don't)
+  if(signedIn()&&SY.rec==null)api("/api/me").then(m=>{SY.rec=m.recovery?1:0;sySave();if(!SY.rec&&sh.isConnected)redraw()}).catch(()=>{});
   // opening an account and signing in end the same way: keep a copy of the phone's data, then sync
   const enter=async(btn,busy,label,path,body)=>{const email=body.email;
     const real=!S.demo&&(S.customers.length||S.orders.length||S.payments.length);
@@ -2047,7 +2074,9 @@ function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a
       if(real){try{localStorage.setItem("mandoub.presync",JSON.stringify(S))}catch(e){}} // a copy of the phone's data from before the first sync
       if(S.demo){const keep={...S.settings};S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:keep,products:[],carton:S.carton||{},cat:S.cat,customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save()}
       SY={token:r.token,email:r.email,name:r.name,owner:r.email,since:0,known:{}};sySave();redraw();toast("دخلت ✓ ببعت وأستلم البيانات…");
-      accMode="in";await syncNow();if(pushOk())pushSubscribe().catch(()=>{});redraw();toast(SY.err?SY.err:"✓ بياناتك اتزامنت");go(route.v,route.arg)}
+      if(r.recovery){SY.rec=1;sySave()}
+      accMode="in";await syncNow();if(pushOk())pushSubscribe().catch(()=>{});redraw();toast(SY.err?SY.err:"✓ بياناتك اتزامنت");go(route.v,route.arg);
+      if(r.recovery)recoverySheet(r.recovery)}
     catch(e){btn.disabled=false;btn.textContent=label;const h=sh.querySelector("#ahint");if(h){h.textContent=e.message;h.style.color="var(--bad)"}}};
   const ain=sh.querySelector("#ain");if(ain)ain.onclick=()=>{const email=sh.querySelector("#aem").value.trim().toLowerCase(),password=sh.querySelector("#apw").value;
     if(!email||!password)return toast("اكتب الإيميل والباسورد");enter(ain,"بدخل…","ادخل","/api/login",{email,password})};
@@ -2056,6 +2085,13 @@ function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a
     if(password.length<6)return toast("الباسورد لازم 6 حروف أو أرقام على الأقل");
     if(password!==sh.querySelector("#apw2").value)return toast("الباسورد مش زي بعضه في الخانتين");
     enter(aup,"بعمل الحساب…","اعمل الحساب","/api/signup",{email,password,name})};
+  const ars=sh.querySelector("#arst");if(ars)ars.onclick=()=>{const email=sh.querySelector("#aem").value.trim().toLowerCase(),code=sh.querySelector("#acode").value.trim(),password=sh.querySelector("#apw").value;
+    if(!email||!code)return toast("اكتب الإيميل وكود الاسترجاع");if(password.length<6)return toast("الباسورد لازم 6 حروف أو أرقام على الأقل");
+    if(password!==sh.querySelector("#apw2").value)return toast("الباسورد مش زي بعضه في الخانتين");
+    enter(ars,"بغيّر…","غيّر الباسورد وادخل","/api/reset",{email,code,password})};
+  const ap=sh.querySelector("#apass");if(ap)ap.onclick=passSheet;
+  const ar=sh.querySelector("#arec");if(ar)ar.onclick=async()=>{if(SY.rec&&!ar.dataset.armed){ar.dataset.armed=1;ar.textContent="الكود القديم هيبطل · دوس تاني";return}
+    try{const r=await api("/api/recovery",{});SY.rec=1;sySave();redraw();recoverySheet(r.recovery)}catch(e){toast(e.message)}};
   const an=sh.querySelector("#anow");if(an)an.onclick=async()=>{an.disabled=true;an.textContent="بيزامن…";await syncNow();redraw()};
   const ao=sh.querySelector("#aout");if(ao)ao.onclick=()=>{if(!ao.dataset.armed){ao.dataset.armed=1;ao.textContent="متأكد؟ بياناتك هتفضل على الموبايل";return}
     pushUnsub().finally(()=>api("/api/logout",{}).catch(()=>{}));SY={owner:SY.owner};sySave();syBadge();redraw();toast("خرجت من الحساب")};
