@@ -435,7 +435,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=46; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=47; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1794,7 +1794,7 @@ function settingsSheet(){const s=S.settings;
     <label class="f">لو طلب اتحفظ وما اتبعتش للزميل، يظهرلك بالأحمر في «محتاج تفتكر» بعد<select class="inp" id="srm"><option value="0" ${s.remind==0?"selected":""}>على طول</option><option value="1" ${s.remind==1?"selected":""}>يوم</option><option value="2" ${s.remind==2?"selected":""}>يومين</option></select></label>
     ${zSection()}
     <section class="sec"><h2>الإشعارات</h2>
-    <p class="hint">التطبيق يفكّرك بإشعار على الموبايل حتى لو قافله. كروم هو اللي بيحدد إمتى، غالبًا مرة أو مرتين في اليوم، ولازم التطبيق يكون متثبّت على الشاشة.</p>
+    <p class="hint">${signedIn()?"التطبيق يفكّرك بإشعار في ميعاده بالظبط حتى لو قافله (من 9 الصبح لـ 9 بالليل). دوس «شغّل الإشعارات» مرة واحدة على الموبايل ده.":"التطبيق يفكّرك بإشعار على الموبايل حتى لو قافله. كروم هو اللي بيحدد إمتى، غالبًا مرة أو مرتين في اليوم. لو دخلت بحسابك فوق، التذكير هييجي في ميعاده بالظبط."}</p>
     <div class="list">${NOTIF.map(([k,t])=>`<label class="row" style="cursor:pointer"><span class="main t" style="font-weight:600">${t}</span><input type="checkbox" data-nt="${k}" ${notifOn(k)?"checked":""} style="width:22px;height:22px;accent-color:var(--accent)"></label>`).join("")}</div>
     <div class="btns"><button class="btn dark" id="nOn">${notifState()}</button><button class="btn ghost" id="nTest">جرّب إشعار</button></div><p class="hint" id="nHint"></p></section>
     <section class="sec"><h2>البيانات</h2><p class="hint">${signedIn()?"بياناتك محفوظة على الموبايل وعلى السيرفر. النسخة الاحتياطية زيادة أمان.":"البيانات محفوظة على الموبايل ده بس. ادخل بحسابك فوق، أو خد نسخة احتياطية كل فترة."}</p>
@@ -1834,7 +1834,7 @@ const NOTIF=[["draft","طلب اتحفظ وما اتبعتش للزميل"],["se
   ["late","عميل اتأخر عن ميعاد طلبه المعتاد"],["money","عميل عليه فلوس بقاله كتير ما اتحصلتش"],["backup","ما خدتش نسخة احتياطية"]];
 const notifOn=k=>(S.settings.notif||{})[k]!==false;
 const canNotify=()=>"Notification" in window&&"serviceWorker" in navigator;
-function notifState(){if(!canNotify())return"الإشعارات مش متاحة هنا";return Notification.permission==="granted"?"الإشعارات شغالة ✓":Notification.permission==="denied"?"الإشعارات مقفولة من المتصفح":"شغّل الإشعارات"}
+function notifState(){if(!canNotify())return"الإشعارات مش متاحة هنا";return Notification.permission==="granted"?(signedIn()&&!SY.push&&"PushManager" in window?"شغّل إشعارات السيرفر":"الإشعارات شغالة ✓"):Notification.permission==="denied"?"الإشعارات مقفولة من المتصفح":"شغّل الإشعارات"}
 function notifySnapshot(){if(!("caches" in window))return;const items=[];const add=(k,due,t)=>{if(notifOn(k))items.push({k,due,t})};
   S.orders.filter(o=>o.status==="draft").forEach(o=>add("draft",o.created+(+S.settings.remind||0)*DAY,`طلب ${cust(o.customerId).name} لسه ما اتبعتش`));
   S.orders.filter(o=>o.status==="sent").forEach(o=>add("sent",(o.hist.sent||o.created)+2*DAY,`طلب #${o.no} اتبعت ومحدش أكد تسجيله`));
@@ -1844,14 +1844,33 @@ function notifySnapshot(){if(!("caches" in window))return;const items=[];const a
       add("late",sod(ts[ts.length-1])+Math.max(avg*1.5,avg+5)*DAY,`${c.name} اتأخر عن طلبه المعتاد · كلّمه`)}
     const b=balance(c.id);if(b>0)add("money",(lastPayment(c.id)||S.since||Date.now())+14*DAY,`${c.name} عليه ${Math.round(b).toLocaleString("en-US")} ج`)});
   if(!S.demo)add("backup",(S.lastBackup||S.since||Date.now())+3*DAY,"خد نسخة احتياطية من الإعدادات");
-  caches.open("mandoub-notify").then(c=>c.put("notify.json",new Response(JSON.stringify({items,at:Date.now()}),{headers:{"Content-Type":"application/json"}}))).catch(()=>{})}
+  caches.open("mandoub-notify").then(c=>c.put("notify.json",new Response(JSON.stringify({items,at:Date.now()}),{headers:{"Content-Type":"application/json"}}))).catch(()=>{});
+  pushPlan(items)}
+/* push from the server: with an account and notifications allowed, this phone subscribes (VAPID key from /api/push/key)
+   and sends its reminder plan whenever it changes; the server pushes each item when it comes due, by day only */
+const pushOk=()=>signedIn()&&!S.demo&&"PushManager" in window&&canNotify()&&Notification.permission==="granted";
+let pushLast="";
+function pushPlan(items){if(!pushOk()||!SY.push)return;const j=JSON.stringify(items.map(i=>[i.k,i.t,i.due]));if(j===pushLast)return;
+  api("/api/push/plan",{items}).then(()=>{pushLast=j}).catch(()=>{})}
+async function pushSubscribe(){const reg=await navigator.serviceWorker.ready;let sub=await reg.pushManager.getSubscription();
+  if(!sub){const {key}=await api("/api/push/key");if(!key)throw new Error("السيرفر لسه ما اتجهزش للإشعارات");
+    const raw=Uint8Array.from(atob(key.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((key.length+3)%4)),c=>c.charCodeAt(0));
+    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:raw})}
+  await api("/api/push/sub",sub.toJSON());SY.push=sub.endpoint;sySave();pushLast="";notifySnapshot();
+  try{await reg.periodicSync?.unregister("mandoub-remind")}catch(e){} // the server reminds now; no double notifications
+  return sub}
+async function pushUnsub(){try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub){await api("/api/push/unsub",{endpoint:sub.endpoint}).catch(()=>{});await sub.unsubscribe()}}catch(e){}}
 async function enableNotif(){if(!canNotify())return"الموبايل ده أو المتصفح ده مش بيدعم الإشعارات.";
   const p=await Notification.requestPermission();if(p!=="granted")return"لازم تسمح بالإشعارات علشان تشتغل. لو قفلتها، افتحها من إعدادات كروم للموقع ده.";
+  if(pushOk()){try{await pushSubscribe();return"تمام ✓ هيوصلك التذكير في ميعاده من السيرفر، حتى لو البرنامج مقفول (من 9 الصبح لـ 9 بالليل)."}
+    catch(e){if(/iPhone|iPad/.test(navigator.userAgent)&&!matchMedia("(display-mode: standalone)").matches)return"على الآيفون: ثبّت البرنامج الأول من زرار المشاركة ← Add to Home Screen، وافتحه من الأيقونة وشغّل الإشعارات من هناك.";}}
   notifySnapshot();const reg=await navigator.serviceWorker.ready;
   if(!("periodicSync" in reg))return"الإشعارات اتسمحت، بس الموبايل ده مش بيصحّي التطبيق في الخلفية (زي الآيفون). هتشوف التذكيرات لما تفتحه.";
   try{await reg.periodicSync.register("mandoub-remind",{minInterval:6*3600e3});return"تمام ✓ هيفكّرك لما يكون فيه حاجة محتاج تفتكرها."}
   catch(e){return"الإشعارات اتسمحت. علشان التذكير في الخلفية يشتغل، ثبّت التطبيق على الشاشة الرئيسية من ⋮ ← Add to Home screen."}}
 async function testNotif(){if(!canNotify()||Notification.permission!=="granted")return"شغّل الإشعارات الأول.";
+  // with push: a real one from the server, the same way the reminders come
+  if(pushOk()&&SY.push){try{const r=await api("/api/push/test",{});return r.ok?"بعتلك إشعار من السيرفر ✓ لو ما وصلش في دقيقة، قولّنا":"السيرفر بعت بس الإشعار ما وصلش. دوس «شغّل الإشعارات» تاني"}catch(e){return e.message}}
   const reg=await navigator.serviceWorker.ready;const n=alerts().length;
   reg.showNotification("SalesGo",{body:n?`عندك ${n} حاجات في «محتاج تفتكر»`:"كله تمام، مفيش حاجة متأخرة",icon:"icon-192.png",badge:"icon-192.png",tag:"mandoub-test",dir:"rtl",lang:"ar"});return""}
 
@@ -2028,7 +2047,7 @@ function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a
       if(real){try{localStorage.setItem("mandoub.presync",JSON.stringify(S))}catch(e){}} // a copy of the phone's data from before the first sync
       if(S.demo){const keep={...S.settings};S={v:1,demo:false,seq:1,since:Date.now(),lastBackup:0,settings:keep,products:[],carton:S.carton||{},cat:S.cat,customers:[],orders:[],requests:[],payments:[],handovers:[],adjusts:[]};save()}
       SY={token:r.token,email:r.email,name:r.name,owner:r.email,since:0,known:{}};sySave();redraw();toast("دخلت ✓ ببعت وأستلم البيانات…");
-      accMode="in";await syncNow();redraw();toast(SY.err?SY.err:"✓ بياناتك اتزامنت");go(route.v,route.arg)}
+      accMode="in";await syncNow();if(pushOk())pushSubscribe().catch(()=>{});redraw();toast(SY.err?SY.err:"✓ بياناتك اتزامنت");go(route.v,route.arg)}
     catch(e){btn.disabled=false;btn.textContent=label;const h=sh.querySelector("#ahint");if(h){h.textContent=e.message;h.style.color="var(--bad)"}}};
   const ain=sh.querySelector("#ain");if(ain)ain.onclick=()=>{const email=sh.querySelector("#aem").value.trim().toLowerCase(),password=sh.querySelector("#apw").value;
     if(!email||!password)return toast("اكتب الإيميل والباسورد");enter(ain,"بدخل…","ادخل","/api/login",{email,password})};
@@ -2039,7 +2058,7 @@ function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a
     enter(aup,"بعمل الحساب…","اعمل الحساب","/api/signup",{email,password,name})};
   const an=sh.querySelector("#anow");if(an)an.onclick=async()=>{an.disabled=true;an.textContent="بيزامن…";await syncNow();redraw()};
   const ao=sh.querySelector("#aout");if(ao)ao.onclick=()=>{if(!ao.dataset.armed){ao.dataset.armed=1;ao.textContent="متأكد؟ بياناتك هتفضل على الموبايل";return}
-    api("/api/logout",{}).catch(()=>{});SY={owner:SY.owner};sySave();syBadge();redraw();toast("خرجت من الحساب")};
+    pushUnsub().finally(()=>api("/api/logout",{}).catch(()=>{}));SY={owner:SY.owner};sySave();syBadge();redraw();toast("خرجت من الحساب")};
   const ad=sh.querySelector("#adel");if(ad)ad.onclick=async()=>{SY.okDel=1;SY.held=0;await syncNow();redraw()};
   const ab=sh.querySelector("#aback");if(ab)ab.onclick=async()=>{SY.held=0;syReset();await syncNow();redraw();toast("رجعوا ✓")}}
 /* the colleague's screen: a link (/z/<token>) the rep sends him; he sees the sent orders and marks اتسجل / اتشحن / اتسلم */
@@ -2067,6 +2086,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 setInterval(()=>{if(document.visibilityState==="visible")syncSoon(0)},120000);
 /* ---------- boot ---------- */
 render();loadPhotos();syBadge();syncSoon(1500);
+setTimeout(()=>{if(pushOk()&&"serviceWorker" in navigator)pushSubscribe().catch(()=>{})},4000);
 {const sp=$("#splash");if(sp){setTimeout(()=>{sp.classList.add("out");setTimeout(()=>sp.remove(),320)},450)}}setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);
 if("serviceWorker" in navigator&&window.isSecureContext&&window.top===window.self){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();if(TRIAL&&Date.now()-licAt>6*36e5)licCheck()}});

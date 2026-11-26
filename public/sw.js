@@ -1,4 +1,4 @@
-const CACHE="mandoub-v46";
+const CACHE="mandoub-v47";
 const SHELL=["./","index.html","catalog.js","manifest.json","icon-192.png","icon-512.png","icon-maskable.png","icon-maskable-192.png","icon-32.png","apple-touch-icon.png","logo-light.svg","logo-dark.svg","logo-stacked-light.svg","logo-stacked-dark.svg","symbol.svg"];
 const PHOTOS="catalog-img.js"; // ~850 KB of product photos, only changes with a release
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>{c.add(PHOTOS).catch(()=>{});return c.addAll(SHELL.map(u=>new Request(u,{cache:"reload"})))}).then(()=>self.skipWaiting()))});
@@ -36,5 +36,8 @@ async function remind(){
     {body:due.slice(0,4).map(i=>"• "+i.t).join("\n")+(due.length>4?`\nو ${due.length-4} كمان`:""),icon:"icon-192.png",badge:"icon-192.png",tag:"mandoub-remind",dir:"rtl",lang:"ar"});
 }
 self.addEventListener("periodicsync",e=>{if(e.tag==="mandoub-remind")e.waitUntil(remind())});
+// a push from the server (worker/push.js) carries the text; one without text falls back to the saved reminders
+self.addEventListener("push",e=>{let d={};try{d=e.data?e.data.json():{}}catch(x){}
+  e.waitUntil(d.title?self.registration.showNotification(d.title,{body:d.body||"",icon:"icon-192.png",badge:"icon-192.png",tag:d.tag||"mandoub-remind",dir:"rtl",lang:"ar"}):remind())});
 self.addEventListener("notificationclick",e=>{e.notification.close();
   e.waitUntil(clients.matchAll({type:"window",includeUncontrolled:true}).then(ws=>{const w=ws.find(x=>"focus" in x);return w?w.focus():clients.openWindow("./")}))});

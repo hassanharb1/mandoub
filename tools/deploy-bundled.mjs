@@ -33,7 +33,7 @@ walk("public");
 
 const out = join(tmpdir(), `salesgo-bundle-${trial ? "trial" : "main"}`);
 mkdirSync(join(out, "worker"), { recursive: true });
-copyFileSync("worker/index.js", join(out, "worker", "index.js"));
+for (const f of readdirSync("worker")) if (f.endsWith(".js")) copyFileSync(join("worker", f), join(out, "worker", f));
 writeFileSync(join(out, "files.js"), "export default " + JSON.stringify(files) + ";\n");
 writeFileSync(join(out, "entry.js"), `import api from "./worker/index.js";
 import FILES from "./files.js";
@@ -48,9 +48,9 @@ const ASSETS = { async fetch(req) {
   if (req.headers.get("if-none-match") === f.e) return new Response(null, { status: 304, headers: h });
   return new Response(req.method === "HEAD" ? null : body(f), { headers: h });
 } };
-export default { fetch: (req, env, ctx) => api.fetch(req, { ...env, ASSETS }, ctx) };
+export default { fetch: (req, env, ctx) => api.fetch(req, { ...env, ASSETS }, ctx), scheduled: (ev, env, ctx) => api.scheduled(ev, env, ctx) };
 `);
-const w = { name: cfg.name, main: "entry.js", compatibility_date: cfg.compatibility_date, d1_databases: cfg.d1_databases };
+const w = { name: cfg.name, main: "entry.js", compatibility_date: cfg.compatibility_date, d1_databases: cfg.d1_databases, triggers: cfg.triggers, vars: cfg.vars };
 writeFileSync(join(out, "wrangler.json"), JSON.stringify(w, null, 2));
 console.log(`packed ${Object.keys(files).length} files into ${out}`);
 const extra = process.argv.includes("--dry-run") ? ["--dry-run"] : [];

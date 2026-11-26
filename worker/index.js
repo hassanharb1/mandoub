@@ -2,6 +2,8 @@
    /api/*  : accounts and sync (D1 binding DB). Everything else: the static app in ./public (ASSETS).
    Same address as the app, so nothing new can be blocked in Egypt and no CORS is needed. */
 
+import { runPush, savePlan, sendPush } from "./push.js";
+
 const ITER = 10000; // PBKDF2 rounds: low enough for the Workers free CPU budget; sign-up is closed and wrong passwords lock the account
 const LOCK_AFTER = 8, LOCK_MS = 15 * 60e3;
 const MAX_CHANGES = 60, ROWS_PER_INSERT = 12, PULL_LIMIT = 400;
@@ -178,6 +180,8 @@ async function colleaguePage(req, env) {
 }
 
 export default {
+  // every 15 minutes (wrangler triggers): push the reminders that came due
+  async scheduled(ev, env, ctx) { ctx.waitUntil(runPush(env)); },
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/z/")) return colleaguePage(req, env);
@@ -197,7 +201,29 @@ export default {
       if (!a) return json({ error: "سجّل دخول تاني" }, 401);
       if (req.method === "POST" && url.pathname === "/api/sync") return await sync(req, env, a);
       if (req.method === "POST" && url.pathname === "/api/link") return await linkMake(env, a);
+      // push notifications: the phone's subscription and its reminder plan
+      if (req.method === "POST" && url.pathname === "/api/push/sub") {
+        const { endpoint, keys } = await req.json().catch(() => ({}));
+        if (!/^https:\/\//.test(endpoint || "") || !keys || !keys.p256dh || !keys.auth) return json({ error: "bad subscription" }, 400);
+        await env.DB.prepare(`INSERT INTO push_subs (endpoint, user_id, p256dh, auth, created) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`).bind(endpoint, a.uid, keys.p256dh, keys.auth, Date.now()).run();
+        return json({ ok: true });
+      }
+      if (req.method === "POST" && url.pathname === "/api/push/unsub") {
+        const { endpoint } = await req.json().catch(() => ({}));
+        await env.DB.prepare("DELETE FROM push_subs WHERE user_id = ? AND endpoint = ?").bind(a.uid, String(endpoint || "")).run();
+        return json({ ok: true });
+      }
+      if (req.method === "POST" && url.pathname === "/api/push/plan") return await savePlan(req, env, a.uid);
+      if (req.method === "POST" && url.pathname === "/api/push/test") {
+        const subs = (await env.DB.prepare("SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = ?").bind(a.uid).all()).results;
+        if (!subs.length) return json({ error: "الموبايل ده مش مشترك في الإشعارات لسه" }, 404);
+        const st = [];
+        for (const s of subs) { try { st.push(await sendPush(s, { title: "SalesGo", body: "الإشعارات شغالة ✓ هيوصلك تذكير في ميعاده حتى لو البرنامج مقفول", tag: "mandoub-test" }, env)); } catch (e) { st.push(String(e.message || e)); } }
+        return json({ ok: st.some(x => x >= 200 && x < 300), status: st });
+      }
       if (req.method === "POST" && url.pathname === "/api/link/off") { await env.DB.prepare("DELETE FROM links WHERE user_id = ?").bind(a.uid).run(); return json({ ok: true }); }
+      if (req.method === "GET" && url.pathname === "/api/push/key") return json({ key: env.VAPID_PUBLIC || "" });
       if (req.method === "GET" && url.pathname === "/api/me") return json(await env.DB.prepare("SELECT email, name FROM users WHERE id = ?").bind(a.uid).first() || {});
       if (req.method === "POST" && url.pathname === "/api/logout") {
         await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(a.h).run();

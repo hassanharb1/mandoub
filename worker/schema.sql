@@ -42,3 +42,20 @@ CREATE TABLE IF NOT EXISTS links (
   created    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS links_user ON links (user_id);
+-- push notifications: each phone's subscription, and each account's reminder plan (items with due times) and what was sent when
+CREATE TABLE IF NOT EXISTS push_subs (
+  endpoint TEXT PRIMARY KEY,
+  user_id  TEXT NOT NULL,
+  p256dh   TEXT NOT NULL,
+  auth     TEXT NOT NULL,
+  created  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id);
+CREATE TABLE IF NOT EXISTS push_plan (
+  user_id  TEXT PRIMARY KEY,
+  items    TEXT NOT NULL,             -- [{k, t, due}]
+  sent     TEXT NOT NULL DEFAULT '{}',-- {"k|t": when pushed}
+  next_due INTEGER NOT NULL,          -- the cron looks at this account again from then
+  updated  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS push_plan_due ON push_plan (next_due);
