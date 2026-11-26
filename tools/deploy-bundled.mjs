@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, copyFileSync } from "node:fs";
 import { join, relative, extname, resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 
 const trial = process.argv.includes("--trial");
@@ -18,6 +18,12 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp", ".jpg": "image/jpeg", ".css": "text/css; charset=utf-8", ".txt": "text/plain; charset=utf-8" };
 const TEXT = new Set([".html", ".js", ".json", ".svg", ".css", ".txt"]);
 
+// the tests run first (tests/: the app in a browser + the server on a local D1); --skip-tests only in an emergency
+if (!process.argv.includes("--skip-tests") && !process.argv.includes("--dry-run")) {
+  console.log("▶ running the tests before deploying…");
+  const t = spawnSync(process.execPath, ["--test", "--test-concurrency=1", "tests/app.test.mjs", "tests/api.test.mjs"], { stdio: "inherit" });
+  if (t.status !== 0) { console.error("✘ a test failed, not deploying (fix it, or --skip-tests in an emergency)"); process.exit(1); }
+}
 // safety: never ship an empty key file, and VERSION in index.html must match CACHE in sw.js
 for (const f of ["index.html", "sw.js", "catalog.js", "catalog-img.js", "manifest.json"]) {
   if (!statSync(join("public", f)).size) { console.error(`✘ public/${f} is empty, not deploying`); process.exit(1); }

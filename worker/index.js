@@ -62,7 +62,7 @@ async function signup(req, env) {
   if (pw.length > 200) return json({ error: "الباسورد طويل قوي" }, 400);
   const ip = req.headers.get("cf-connecting-ip") || "", now = Date.now();
   const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM signups WHERE ip = ? AND at > ?").bind(ip, now - 864e5).first();
-  if (n && n.n >= SIGNUPS_PER_IP) return json({ error: "اتعمل حسابات كتير من النت ده النهارده. جرّب بكرة" }, 429);
+  if (n && n.n >= (+env.SIGNUPS_PER_IP || SIGNUPS_PER_IP)) return json({ error: "اتعمل حسابات كتير من النت ده النهارده. جرّب بكرة" }, 429);
   if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(e).first()) return json({ error: "الإيميل ده عليه حساب قبل كده. ادخل بيه" }, 409);
   const u = { id: crypto.randomUUID(), email: e, name: nm };
   return newSession(env, u, [
@@ -219,7 +219,10 @@ export default {
         const subs = (await env.DB.prepare("SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = ?").bind(a.uid).all()).results;
         if (!subs.length) return json({ error: "الموبايل ده مش مشترك في الإشعارات لسه" }, 404);
         const st = [];
-        for (const s of subs) { try { st.push(await sendPush(s, { title: "SalesGo", body: "الإشعارات شغالة ✓ هيوصلك تذكير في ميعاده حتى لو البرنامج مقفول", tag: "mandoub-test" }, env)); } catch (e) { st.push(String(e.message || e)); } }
+        for (const s of subs) {
+          try { const x = await sendPush(s, { title: "SalesGo", body: "الإشعارات شغالة ✓ هيوصلك تذكير في ميعاده حتى لو البرنامج مقفول", tag: "mandoub-test" }, env); st.push(x);
+            if (x === 404 || x === 410) await env.DB.prepare("DELETE FROM push_subs WHERE endpoint = ?").bind(s.endpoint).run(); } // gone: forget it
+          catch (e) { st.push(String(e.message || e)); } }
         return json({ ok: st.some(x => x >= 200 && x < 300), status: st });
       }
       if (req.method === "POST" && url.pathname === "/api/link/off") { await env.DB.prepare("DELETE FROM links WHERE user_id = ?").bind(a.uid).run(); return json({ ok: true }); }

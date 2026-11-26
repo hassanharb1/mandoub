@@ -1,0 +1,15 @@
+{
+  "name": "salesgo",
+  "private": true,
+  "description": "SalesGo by MESTK: the rep's app (public/) and its Cloudflare Worker (worker/). No build step; these are only the tools to test and deploy.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:app": "node --test tests/app.test.mjs",
+    "test:api": "node --test tests/api.test.mjs",
+    "deploy": "node tools/deploy-bundled.mjs && node tools/deploy-bundled.mjs --trial --skip-tests"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "wrangler": "^4.167.0"
+  }
+}
