@@ -18,6 +18,12 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp", ".jpg": "image/jpeg", ".css": "text/css; charset=utf-8", ".txt": "text/plain; charset=utf-8" };
 const TEXT = new Set([".html", ".js", ".json", ".svg", ".css", ".txt"]);
 
+// safety: never ship an empty key file, and VERSION in index.html must match CACHE in sw.js
+for (const f of ["index.html", "sw.js", "catalog.js", "catalog-img.js", "manifest.json"]) {
+  if (!statSync(join("public", f)).size) { console.error(`✘ public/${f} is empty, not deploying`); process.exit(1); }
+}
+const ver = (readFileSync("public/index.html", "utf8").match(/const VERSION=(\d+)/) || [])[1], cache = (readFileSync("public/sw.js", "utf8").match(/mandoub-v(\d+)/) || [])[1];
+if (!ver || ver !== cache) { console.error(`✘ VERSION ${ver} in index.html ≠ mandoub-v${cache} in sw.js, not deploying`); process.exit(1); }
 const files = {};
 const walk = d => readdirSync(d).forEach(n => { const p = join(d, n); if (statSync(p).isDirectory()) return walk(p);
   const ext = extname(n).toLowerCase(), buf = readFileSync(p), path = "/" + relative("public", p).split("\\").join("/");
