@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>طلبات المندوب · SalesGo</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" media="print" onload="this.media='all'">
+<style>
+/* SalesGo by MESTK · the colleague's screen: the rep's sent orders, step by step (اتسجل → اتشحن → اتسلم) */
+:root{--bg:#F5F0E7;--surface:#fff;--raised:#EDE5D9;--text:#282825;--muted:#65615A;--border:#93887A;--divider:#DED5C8;--brand:#BD572F;--action:#A74724;--onAction:#fff;
+  --ok:#236444;--okBg:#E6F1E8;--warn:#805300;--warnBg:#FFF0C7;--info:#245B86;--infoBg:#E6EFF9;--bad:#B3262E;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#1C1C1A;--surface:#282825;--raised:#34342F;--text:#F5F0E7;--muted:#C6BDB0;--border:#7D756A;--divider:#3E3D38;--brand:#E07B52;--action:#BD572F;
+  --ok:#94D7AA;--okBg:#22382C;--warn:#F2C46D;--warnBg:#3C311D;--info:#AACDF2;--infoBg:#243445;--bad:#FFB3B3;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Cairo,system-ui,Tahoma,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:760px;margin:0 auto;padding:16px 16px 40px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+header img{width:40px;height:40px;border-radius:10px;background:var(--surface);padding:6px}
+header h1{font-size:22px;margin:0;line-height:1.3}
+header .s{color:var(--muted);font-size:14px}
+header .rf{margin-inline-start:auto;border:1px solid var(--border);background:var(--surface);border-radius:12px;min-height:44px;padding:0 14px;font-weight:700}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
+.tab{flex:none;border:1px solid var(--border);background:var(--surface);border-radius:10px;min-height:44px;padding:0 14px;font-weight:700}
+.tab[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.tab .n{opacity:.7;margin-right:6px}
+.card{background:var(--surface);border:1px solid var(--divider);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.card.new{border-color:var(--brand);box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 25%,transparent)}
+.hd{display:flex;gap:10px;align-items:flex-start}
+.hd .main{flex:1;min-width:0}
+.hd b{font-size:18px}
+.hd .s{color:var(--muted);font-size:14px}
+.pill{flex:none;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:800}
+.st-sent{background:var(--warnBg);color:var(--warn)}.st-registered{background:var(--infoBg);color:var(--info)}.st-shipped{background:var(--raised);color:var(--text)}.st-delivered{background:var(--okBg);color:var(--ok)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{background:var(--raised);border-radius:8px;padding:2px 8px;font-size:13px;font-weight:700}
+.tag.hl{background:var(--warnBg);color:var(--warn)}
+ul{list-style:none;margin:10px 0 0;padding:0;border-top:1px solid var(--divider)}
+li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--divider)}
+li .nm{flex:1;min-width:0}
+li .code{color:var(--muted);font-size:13px;direction:ltr;unicode-bidi:isolate}
+li small{display:block;color:var(--muted);font-size:13px}
+li .q{flex:none;font-weight:800;white-space:nowrap}
+.num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums lining-nums}
+.tot{display:flex;justify-content:space-between;padding-top:8px;font-size:15px}
+.tot.net{font-weight:800;font-size:17px}
+.note{margin-top:8px;background:var(--raised);border-radius:10px;padding:8px 10px;font-size:14px;white-space:pre-wrap}
+.btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{flex:1;min-height:48px;border-radius:12px;border:1px solid var(--border);background:var(--surface);font-weight:800;padding:0 12px}
+.btn.primary{background:var(--action);border-color:var(--action);color:var(--onAction)}
+.btn:disabled{opacity:.6}
+.empty{text-align:center;color:var(--muted);padding:40px 16px}
+.err{background:var(--surface);border:1px solid var(--bad);color:var(--bad);border-radius:16px;padding:20px;text-align:center;font-weight:700}
+.toast{position:fixed;bottom:20px;inset-inline:16px;max-width:420px;margin:0 auto;background:var(--text);color:var(--bg);border-radius:12px;padding:12px 16px;text-align:center;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.foot{text-align:center;color:var(--muted);font-size:13px;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><img src="/symbol.svg" alt=""><div><h1 id="ttl">طلبات المندوب</h1><div class="s" id="sub">بيحمّل…</div></div><button class="rf" id="rf">حدّث</button></header>
+  <div class="tabs" id="tabs"></div>
+  <div id="list"><div class="empty">بيحمّل الطلبات…</div></div>
+  <p class="foot">SalesGo by MESTK · الصفحة بتتحدث لوحدها كل نص دقيقة</p>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script src="/catalog.js"></script>
+<script>
+const TOKEN=location.pathname.split("/").filter(Boolean)[1]||"";
+const STEPS=[["sent","جديدة","اتبعت","اتسجل على السيستم"],["registered","اتسجلت","اتسجل","اتشحن"],["shipped","اتشحنت","اتشحن","اتسلم للعميل"],["delivered","اتسلمت","اتسلم",null]];
+const NEXT={sent:"registered",registered:"shipped",shipped:"delivered"};
+const PAY={cash:"كاش",credit:"آجل"};
+const CAT=(self.CATALOG&&self.CATALOG.products)||[],PMAP=Object.fromEntries(CAT.map(p=>[p.id,p])),CO=Object.fromEntries(((self.CATALOG&&self.CATALOG.companies)||[]).map(c=>[c.id,c.name]));
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fm=n=>(Math.round(n*100)/100).toLocaleString("en-US",{maximumFractionDigits:2});
+const WD=["الحد","الاتنين","التلات","الأربع","الخميس","الجمعة","السبت"];
+function when(t){const d=new Date(t),m=Math.round((Date.now()-t)/6e4),hm=d.toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"});
+  if(m<1)return "دلوقتي";if(m<60)return `من ${m} دقيقة`;const today=new Date().toDateString()===d.toDateString();
+  return today?`النهارده ${hm}`:`${WD[d.getDay()]} ${d.getDate()}/${d.getMonth()+1} · ${hm}`}
+let tt;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("on"),2400)}
+// the same sums as the rep's app (orderMoney): price list × count (cartons × pieces), or the total he typed, then the discount
+const unitName=i=>i.unit==="ك"?"كرتونة":"قطعة";
+const lineTotal=i=>i.qty*(i.price||0)*(i.unit==="ك"?(i.per||0):1);
+function money(o){const auto=o.items.reduce((a,i)=>a+lineTotal(i),0),sub=o.subManual!=null?o.subManual:auto,disc=o.discAmt!=null?o.discAmt:sub*(+o.disc||0)/100;
+  return {sub,disc,net:sub-disc,pct:sub?Math.round(disc/sub*10000)/100:(+o.disc||0)}}
+const tags=i=>[i.color&&`اللون: ${i.color}`,i.light&&`الإضاءة: ${i.light}`].filter(Boolean).join(" · ");
+const code=i=>{const p=i.pid&&PMAP[i.pid];return p&&p.code||""};
+const coOf=i=>{const p=i.pid&&PMAP[i.pid];return p&&CO[p.co]||""};
+// the order as text, to paste into the company system
+function text(o){const c=o.cust,m=money(o);
+  return [`طلب #${o.no}`,`العميل: ${c.name}${c.owner?` (${c.owner})`:""}`,c.area?`المنطقة: ${c.area}`:null,"",
+    ...o.items.map(i=>`• ${i.name||"منتج"}${code(i)?` (${code(i)})`:""}${tags(i)?` · ${tags(i)}`:""} × ${i.qty} ${unitName(i)}${i.unit==="ك"&&i.per?` (${i.per} قطعة)`:""}${i.note?`\n   ملحوظة: ${i.note}`:""}`),
+    m.sub?`\nالمجموع: ${fm(m.sub)} ج`:null,m.disc?`خصم العميل ${fm(m.pct)}%: ${fm(m.disc)} ج`:null,m.sub?`الإجمالي: ${fm(m.net)} ج`:null,
+    o.pay?`الدفع: ${PAY[o.pay]}`:null,o.note?`\nملاحظة: ${o.note}`:null].filter(x=>x!==null).join("\n")}
+let data=null,tab="sent",seen=new Set(JSON.parse(localStorage.getItem("z.seen."+TOKEN)||"[]")),busy=false;
+async function load(quiet){if(busy)return;busy=true;
+  try{const r=await fetch(`/api/z/${encodeURIComponent(TOKEN)}`,{cache:"no-store"});const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||"مقدرتش أوصل للسيرفر");data=d;draw()}
+  catch(e){if(!data)$("#list").innerHTML=`<div class="err">${esc(navigator.onLine?e.message:"مفيش نت دلوقتي")}</div>`;else if(!quiet)toast(e.message)}
+  finally{busy=false}}
+function draw(){const os=data.orders,n=k=>os.filter(o=>o.status===k).length,fresh=os.filter(o=>o.status==="sent"&&!seen.has(o.id)).length;
+  $("#ttl").textContent=data.rep?`طلبات ${data.rep}`:"طلبات المندوب";
+  $("#sub").textContent=`${n("sent")} طلب جديد · آخر تحديث ${new Date().toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"})}`;
+  document.title=(n("sent")?`(${n("sent")}) `:"")+($("#ttl").textContent)+" · SalesGo";
+  $("#tabs").innerHTML=STEPS.map(([k,t])=>`<button class="tab" data-tab="${k}" aria-pressed="${k===tab}">${t}<span class="n num">${n(k)}</span></button>`).join("");
+  const list=os.filter(o=>o.status===tab);
+  $("#list").innerHTML=list.length?list.map(card).join(""):`<div class="empty">${tab==="sent"?"مفيش طلبات جديدة دلوقتي":"مفيش طلبات هنا"}</div>`;
+  if(fresh&&tab!=="sent")toast(`فيه ${fresh} طلب جديد`)}
+function card(o){const c=o.cust,m=money(o),s=STEPS.find(x=>x[0]===o.status),nx=NEXT[o.status],isNew=o.status==="sent"&&!seen.has(o.id);
+  return `<div class="card ${isNew?"new":""}" id="o-${esc(o.id)}"><div class="hd"><div class="main"><b>${esc(c.name)}</b>${isNew?` <span class="pill st-sent">جديد</span>`:""}<br>
+    <span class="s">${esc([c.owner,c.area].filter(Boolean).join(" · "))}${c.phone?` · <a href="tel:${esc(c.phone)}" class="num">${esc(c.phone)}</a>`:""}</span><br>
+    <span class="s">طلب #<span class="num">${o.no}</span> · اتبعت ${esc(when(o.hist.sent||o.created))}</span></div><span class="pill st-${o.status}">${s[2]}</span></div>
+    ${o.pay||m.disc?`<div class="tags">${o.pay?`<span class="tag hl">الدفع: ${PAY[o.pay]}</span>`:""}${m.disc?`<span class="tag hl">خصم العميل ${fm(m.pct)}%</span>`:""}</div>`:""}
+    <ul>${o.items.map(i=>`<li><span class="nm">${esc(i.name||"منتج")}${code(i)?` <span class="code">${esc(code(i))}</span>`:""}${coOf(i)?`<small>${esc(coOf(i))}</small>`:""}${tags(i)?`<small><b>${esc(tags(i))}</b></small>`:""}${i.note?`<small>ملحوظة: ${esc(i.note)}</small>`:""}</span>
+      <span class="q"><span class="num">${i.qty}</span> ${unitName(i)}${i.unit==="ك"&&i.per?`<small class="num">(${i.per} قطعة)</small>`:""}</span></li>`).join("")}</ul>
+    ${m.sub?`<div class="tot"><span>المجموع</span><span><span class="num">${fm(m.sub)}</span> ج</span></div>${m.disc?`<div class="tot"><span>الخصم</span><span><span class="num">${fm(m.disc)}</span> ج</span></div>`:""}<div class="tot net"><span>الإجمالي</span><span><span class="num">${fm(m.net)}</span> ج</span></div>`:""}
+    ${o.note?`<div class="note">ملاحظة: ${esc(o.note)}</div>`:""}
+    <div class="btns"><button class="btn" data-copy="${esc(o.id)}">انسخ الطلب</button>${nx?`<button class="btn primary" data-step="${esc(o.id)}|${nx}">${s[3]} ✓</button>`:""}</div></div>`}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-tab]");if(t){tab=t.dataset.tab;draw();return}
+  const cp=e.target.closest("[data-copy]");if(cp){const o=data.orders.find(x=>x.id===cp.dataset.copy);const done=()=>{toast("اتنسخ، الصقه في السيستم");seen.add(o.id);saveSeen();draw()};
+    try{await navigator.clipboard.writeText(text(o));done()}catch(err){const ta=document.createElement("textarea");ta.value=text(o);document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();done()}return}
+  const st=e.target.closest("[data-step]");if(st){const [id,status]=st.dataset.step.split("|");st.disabled=true;
+    try{const r=await fetch(`/api/z/${encodeURIComponent(TOKEN)}/step`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,status})});
+      const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"مقدرتش أحفظ، جرّب تاني");
+      const o=data.orders.find(x=>x.id===id);o.status=status;o.hist[status]=d.at;seen.add(id);saveSeen();
+      toast(`طلب #${o.no}: ${STEPS.find(x=>x[0]===status)[2]} ✓`);draw()}
+    catch(err){st.disabled=false;toast(navigator.onLine?err.message:"مفيش نت دلوقتي")}}});
+const saveSeen=()=>{try{localStorage.setItem("z.seen."+TOKEN,JSON.stringify([...seen].slice(-500)))}catch(e){}};
+$("#rf").onclick=()=>load(false);
+setInterval(()=>{if(document.visibilityState==="visible")load(true)},30000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")load(true)});
+if(!TOKEN)$("#list").innerHTML=`<div class="err">الرابط ناقص. اطلب من المندوب الرابط تاني</div>`;else load(false);
+</script>
+</body>
+</html>

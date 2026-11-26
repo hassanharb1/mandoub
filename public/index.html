@@ -435,7 +435,7 @@ window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr"
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=45; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=46; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1792,6 +1792,7 @@ function settingsSheet(){const s=S.settings;
   const sh=sheet("الإعدادات",`${accountSection()}<label class="f">اسمك<input class="inp" id="sr" value="${esc(s.rep)}" placeholder="بيظهر في الرسالة وفي التحية"></label>
     <div class="inrow"><label class="f">زميلك اللي بيسجل الطلبات<input class="inp" id="sc" value="${esc(s.colleague)}"></label><label class="f">رقم الواتساب بتاعه<input class="inp num" id="sp" type="tel" value="${esc(s.phone)}" placeholder="01xxxxxxxxx" style="text-align:right;direction:ltr"></label></div>
     <label class="f">لو طلب اتحفظ وما اتبعتش للزميل، يظهرلك بالأحمر في «محتاج تفتكر» بعد<select class="inp" id="srm"><option value="0" ${s.remind==0?"selected":""}>على طول</option><option value="1" ${s.remind==1?"selected":""}>يوم</option><option value="2" ${s.remind==2?"selected":""}>يومين</option></select></label>
+    ${zSection()}
     <section class="sec"><h2>الإشعارات</h2>
     <p class="hint">التطبيق يفكّرك بإشعار على الموبايل حتى لو قافله. كروم هو اللي بيحدد إمتى، غالبًا مرة أو مرتين في اليوم، ولازم التطبيق يكون متثبّت على الشاشة.</p>
     <div class="list">${NOTIF.map(([k,t])=>`<label class="row" style="cursor:pointer"><span class="main t" style="font-weight:600">${t}</span><input type="checkbox" data-nt="${k}" ${notifOn(k)?"checked":""} style="width:22px;height:22px;accent-color:var(--accent)"></label>`).join("")}</div>
@@ -1806,7 +1807,7 @@ function settingsSheet(){const s=S.settings;
     <div class="card"><div class="total"><span>النسخة اللي عندك</span><span class="num">v${VERSION}</span></div><div class="hint" id="upHint">دوس علشان تشوف فيه نسخة أحدث ولا لأ. بياناتك مش بتتأثر بالتحديث.</div>
     <button class="btn dark block" id="upBtn">دوّر على تحديث</button></div></section>
     <p class="tagline">SalesGo by MESTK</p>`,`<button class="btn primary block" id="ss">احفظ</button>`);
-  bindAccount(sh);const onSy=()=>{const a=sh.querySelector("#ast");if(!sh.isConnected)document.removeEventListener("syncdone",onSy);else if(a)a.textContent=syState()};document.addEventListener("syncdone",onSy);
+  bindAccount(sh);bindZ(sh);const onSy=()=>{const a=sh.querySelector("#ast");if(!sh.isConnected)document.removeEventListener("syncdone",onSy);else if(a)a.textContent=syState()};document.addEventListener("syncdone",onSy);
   sh.querySelector("#ss").onclick=()=>{Object.assign(s,{rep:$("#sr").value.trim(),colleague:$("#sc").value.trim(),phone:$("#sp").value.trim(),remind:+$("#srm").value});save();closeSheet();toast("اتحفظ");render()};
   sh.querySelectorAll("[data-nt]").forEach(c=>c.onchange=()=>{s.notif={...(s.notif||{}),[c.dataset.nt]:c.checked};save()});
   sh.querySelector("#nOn").onclick=async()=>{const r=await enableNotif();$("#nHint").textContent=r;sh.querySelector("#nOn").textContent=notifState()};
@@ -1945,6 +1946,9 @@ function syDiff(){const loc=syLocal(),known=SY.known||{},ch=[];
 function syApply(rows){let changed=false,cat=false;
   rows.forEach(r=>{const key=syKey(r.kind,r.id);
     if(r.kind==="img"){if(!r.deleted&&r.data&&UIMG[r.id]!==r.data){UIMG[r.id]=r.data;imgPut(r.id,r.data).catch(()=>{});changed=true}SY.known[key]=fnv(JSON.stringify(r.data));return}
+    // a step the colleague marked on his screen (/z/…): orders only move forward
+    if(r.kind==="ostat"){const d=r.data||{},o=S.orders.find(x=>x.id===r.id);SY.known[key]=fnv(JSON.stringify(d));
+      if(o&&!r.deleted&&SIDX[d.status]>SIDX[o.status]){o.status=d.status;o.hist={...(o.hist||{}),...(d.hist||{})};changed=true;(syApply.moved=syApply.moved||[]).push(o)}return}
     if(r.kind==="meta"){const d=r.data||{};S.seq=Math.max(S.seq||1,d.seq||1);S.carton={...(d.carton||{}),...(S.carton||{})};
       S.notDup=[...new Set([...(S.notDup||[]),...(d.notDup||[])])];if(d.ordFrom!=null)S.ordFrom=S.ordFrom==null?d.ordFrom:Math.min(S.ordFrom,d.ordFrom);SY.known[key]=fnv(JSON.stringify(d));changed=true;return}
     // a record changed here while this sync was on its way stays as it is (it goes up next time)
@@ -1978,7 +1982,9 @@ async function syncNow(){if(!signedIn()||S.demo)return;if(syBusy){syAgain=true;r
     SY.last=Date.now();SY.err="";SY.wait="";if(SY.okDel)delete SY.okDel}
   catch(e){if(!e.status){SY.wait=e.message;SY.err=""} // no internet / slow line: not an error, it syncs when the line is back
     else{SY.err=e.message;if(e.status===401){SY.token="";SY.err="خرجت من الحساب، ادخل تاني"}}}
-  finally{syBusy=false;sySave();if(changed){mem=S;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}render()}syBadge();
+  finally{syBusy=false;sySave();const mv=syApply.moved;syApply.moved=null;
+    if(mv&&mv.length)setTimeout(()=>toast(mv.length===1?`${S.settings.colleague||"زميلك"} علّم طلب #${mv[0].no}: ${STATUSES[SIDX[mv[0].status]].t}`:`${S.settings.colleague||"زميلك"} حرّك ${mv.length} طلبات`),300);
+    if(changed){mem=S;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}render()}syBadge();
     document.dispatchEvent(new Event("syncdone"));if(syAgain){syAgain=false;syncSoon(500)}}}
 // S was replaced as a whole (backup restored, demo cleared): send everything again and take back what's on the server
 function syReset(){if(!signedIn())return;SY.known={};SY.since=0;sySave();syncSoon(500)}
@@ -2010,7 +2016,8 @@ function accountSection(){
     ${SY.held?`<p class="hint" style="color:var(--bad)">اتمسح ${SY.held} حاجة من على الموبايل مرة واحدة. لو ده مقصود ابعته للسيرفر، ولو لأ رجّعهم من السيرفر.</p>
       <div class="btns"><button class="btn ghost" id="adel">امسحهم من السيرفر كمان</button><button class="btn primary" id="aback">رجّعهم</button></div>`:""}
     <div class="btns"><button class="btn ghost" id="anow">زامن دلوقتي</button><button class="btn ghost" id="aout">اخرج من الحساب</button></div></div></section>`}
-function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a){a.outerHTML=accountSection();bindAccount(sh)}};
+function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a){a.outerHTML=accountSection();bindAccount(sh)}
+    const z=sh.querySelector("#zsec");if(z){z.outerHTML=zSection();bindZ(sh)}};
   const md=sh.querySelector("#amode");if(md)md.onclick=()=>{accMode=accMode==="up"?"in":"up";redraw()};
   // opening an account and signing in end the same way: keep a copy of the phone's data, then sync
   const enter=async(btn,busy,label,path,body)=>{const email=body.email;
@@ -2035,6 +2042,26 @@ function bindAccount(sh){const redraw=()=>{const a=sh.querySelector("#acc");if(a
     api("/api/logout",{}).catch(()=>{});SY={owner:SY.owner};sySave();syBadge();redraw();toast("خرجت من الحساب")};
   const ad=sh.querySelector("#adel");if(ad)ad.onclick=async()=>{SY.okDel=1;SY.held=0;await syncNow();redraw()};
   const ab=sh.querySelector("#aback");if(ab)ab.onclick=async()=>{SY.held=0;syReset();await syncNow();redraw();toast("رجعوا ✓")}}
+/* the colleague's screen: a link (/z/<token>) the rep sends him; he sees the sent orders and marks اتسجل / اتشحن / اتسلم */
+const zUrl=()=>S.settings.zlink?`${location.origin}/z/${S.settings.zlink}`:"";
+function zSection(){const who=S.settings.colleague||"زميلك";
+  if(!signedIn())return `<section class="sec" id="zsec"><h2>شاشة ${esc(who)}</h2><p class="hint">ادخل بحسابك فوق الأول. بعدها تعمل رابط لـ${esc(who)} يشوف فيه الطلبات أول ما تتبعت، ويعلّم «اتسجل» و«اتشحن» بنفسه، وتوصلك على موبايلك.</p></section>`;
+  if(!S.settings.zlink)return `<section class="sec" id="zsec"><h2>شاشة ${esc(who)}</h2><p class="hint">رابط تبعته لـ${esc(who)}: يشوف فيه الطلبات أول ما تتبعت بكل تفاصيلها، ينسخها للسيستم، ويعلّم «اتسجل» و«اتشحن» و«اتسلم». المراحل دي بتتعلّم عندك لوحدها.</p>
+    <button class="btn primary block" id="zmk">اعمل رابط لـ${esc(who)}</button></section>`;
+  return `<section class="sec" id="zsec"><h2>شاشة ${esc(who)}</h2><div class="card"><div class="hint">الرابط شغال · أي حد معاه يشوف طلباتك، فابعته لـ${esc(who)} بس</div>
+    <div class="num" style="font-size:13px;word-break:break-all;margin:6px 0">${esc(zUrl())}</div>
+    <div class="btns"><button class="btn wa" id="zwa">ابعته واتساب</button><button class="btn ghost" id="zcp">انسخه</button></div>
+    <button class="link" id="zoff" style="margin-top:8px">اقفل الرابط ده (واعمل غيره لو عايز)</button></div></section>`}
+function bindZ(sh){const redraw=()=>{const z=sh.querySelector("#zsec");if(z){z.outerHTML=zSection();bindZ(sh)}};
+  const mk=sh.querySelector("#zmk");if(mk)mk.onclick=async()=>{mk.disabled=true;mk.textContent="بعمل الرابط…";
+    try{const r=await api("/api/link",{});S.settings.zlink=r.token;save();redraw();toast("الرابط جاهز، ابعته لزميلك")}
+    catch(e){mk.disabled=false;mk.textContent="جرّب تاني";toast(e.message)}};
+  const wa=sh.querySelector("#zwa");if(wa)wa.onclick=()=>{const t=`ده رابط طلبات ${S.settings.rep||"المندوب"} على SalesGo: هتلاقي فيه الطلبات أول ما تتبعت، وعلّم عليها «اتسجل» و«اتشحن» من هناك.
+${zUrl()}`;
+    window.open(`https://wa.me/${S.settings.phone?waNum(S.settings.phone):""}?text=${encodeURIComponent(t)}`,"_blank","noopener")};
+  const cp=sh.querySelector("#zcp");if(cp)cp.onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(zUrl()):Promise.reject()).then(()=>toast("اتنسخ"),()=>toast(zUrl()))};
+  const off=sh.querySelector("#zoff");if(off)off.onclick=async()=>{if(!off.dataset.armed){off.dataset.armed=1;off.textContent="متأكد؟ الرابط القديم هيبطل يشتغل · دوس تاني";return}
+    try{await api("/api/link/off",{});delete S.settings.zlink;save();redraw();toast("الرابط اتقفل")}catch(e){toast(e.message)}}}
 addEventListener("online",()=>syncSoon(500));
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")syncSoon(800)});
 setInterval(()=>{if(document.visibilityState==="visible")syncSoon(0)},120000);
