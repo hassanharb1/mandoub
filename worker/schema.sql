@@ -35,3 +35,10 @@ CREATE TABLE IF NOT EXISTS signups (
   at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS signups_ip ON signups (ip, at);
+-- the link the rep gives his colleague (/z/<token>); one per account, the token itself only in the link
+CREATE TABLE IF NOT EXISTS links (
+  token_hash TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  created    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS links_user ON links (user_id);

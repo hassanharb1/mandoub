@@ -6,6 +6,7 @@ const ITER = 10000; // PBKDF2 rounds: low enough for the Workers free CPU budget
 const LOCK_AFTER = 8, LOCK_MS = 15 * 60e3;
 const MAX_CHANGES = 60, ROWS_PER_INSERT = 12, PULL_LIMIT = 400;
 const KINDS = new Set(["customers", "orders", "payments", "handovers", "adjusts", "requests", "settings", "cat", "meta", "img"]);
+const STEPS = ["draft", "sent", "registered", "shipped", "delivered"];
 
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 const b64 = buf => { const u = new Uint8Array(buf); let s = ""; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
@@ -115,17 +116,88 @@ async function sync(req, env, a) {
   });
 }
 
+/* ---------- the colleague's screen (/z/<token>) ----------
+   The rep makes a link from Settings; whoever has it sees his sent orders and moves them forward
+   (اتسجل → اتشحن → اتسلم). Those steps are written as "ostat" records (one per order) that the rep's phone
+   merges on its next sync, so they never clash with the rep's own edits of the order. */
+async function linkMake(env, a) {
+  const token = b64(crypto.getRandomValues(new Uint8Array(24))).replace(/[+/=]/g, c => ({ "+": "-", "/": "_", "=": "" }[c]));
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM links WHERE user_id = ?").bind(a.uid),
+    env.DB.prepare("INSERT INTO links (token_hash, user_id, created) VALUES (?, ?, ?)").bind(await sha256(token), a.uid, Date.now()),
+  ]);
+  return json({ token });
+}
+async function linkUser(env, token) {
+  if (!token || token.length > 100) return null;
+  const r = await env.DB.prepare("SELECT l.user_id FROM links l JOIN users u ON u.id = l.user_id WHERE l.token_hash = ? AND u.off = 0").bind(await sha256(token)).first();
+  return r && r.user_id;
+}
+async function zOrders(env, uid) {
+  const { results } = await env.DB.prepare("SELECT kind, id, data FROM records WHERE user_id = ? AND deleted = 0 AND kind IN ('orders','customers','settings','ostat')").bind(uid).all();
+  const st = {}, cust = {}, orders = []; let settings = {};
+  for (const r of results) {
+    const d = JSON.parse(r.data || "null"); if (!d) continue;
+    if (r.kind === "ostat") st[r.id] = d; else if (r.kind === "customers") cust[r.id] = d; else if (r.kind === "settings") settings = d; else orders.push(d);
+  }
+  const since = Date.now() - 45 * 864e5, out = [];
+  for (const o of orders) {
+    const x = st[o.id]; let status = o.status, hist = { ...(o.hist || {}) };
+    if (x && STEPS.indexOf(x.status) > STEPS.indexOf(status)) status = x.status;
+    if (x && x.hist) hist = { ...hist, ...x.hist };
+    if (status === "draft") continue;
+    const at = hist.sent || o.created;
+    if (status === "delivered" && at < since) continue;
+    const c = cust[o.customerId] || {};
+    out.push({ ...o, status, hist, cust: { name: c.name || "", owner: c.owner || "", area: c.area || "", phone: c.phone || "" } });
+  }
+  out.sort((a, b) => (b.hist.sent || b.created) - (a.hist.sent || a.created));
+  return json({ rep: settings.rep || "", colleague: settings.colleague || "", orders: out });
+}
+async function zStep(req, env, uid) {
+  const { id, status } = await req.json().catch(() => ({}));
+  if (typeof id !== "string" || !STEPS.includes(status) || status === "draft" || status === "sent") return json({ error: "bad request" }, 400);
+  const o = await env.DB.prepare("SELECT data FROM records WHERE user_id = ? AND kind = 'orders' AND id = ? AND deleted = 0").bind(uid, id).first();
+  if (!o) return json({ error: "الطلب ده مش موجود" }, 404);
+  const prev = await env.DB.prepare("SELECT data FROM records WHERE user_id = ? AND kind = 'ostat' AND id = ?").bind(uid, id).first();
+  const old = prev ? JSON.parse(prev.data || "{}") : {}, now = Date.now();
+  const data = { status, hist: { ...(old.hist || {}), [status]: now }, by: "colleague" };
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET seq = seq + 1 WHERE id = ?").bind(uid),
+    env.DB.prepare(`INSERT INTO records (user_id, kind, id, data, deleted, rev, sv) VALUES (?, 'ostat', ?, ?, 0, ?, (SELECT seq FROM users WHERE id = ?))
+      ON CONFLICT (user_id, kind, id) DO UPDATE SET data = excluded.data, rev = excluded.rev, sv = excluded.sv`).bind(uid, id, JSON.stringify(data), now, uid),
+  ]);
+  return json({ ok: true, status, at: now });
+}
+// the page itself: public/colleague.html, whatever /z/<token> is
+async function colleaguePage(req, env) {
+  const u = new URL(req.url); u.pathname = "/colleague.html"; u.search = "";
+  let r = await env.ASSETS.fetch(new Request(u, { headers: req.headers }));
+  if (r.status >= 300 && r.status < 400 && r.headers.get("location")) r = await env.ASSETS.fetch(new Request(new URL(r.headers.get("location"), u)));
+  return r;
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    if (url.pathname.startsWith("/z/")) return colleaguePage(req, env);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(req);
     if (!env.DB) return json({ error: "السيرفر لسه ما اتربطش بقاعدة البيانات" }, 503);
     try {
       if (req.method === "POST" && url.pathname === "/api/login") return await login(req, env);
       if (req.method === "POST" && url.pathname === "/api/signup") return await signup(req, env);
+      const z = url.pathname.match(/^\/api\/z\/([A-Za-z0-9_-]+)(\/step)?$/);
+      if (z) {
+        const uid = await linkUser(env, z[1]);
+        if (!uid) return json({ error: "الرابط ده اتقفل أو مش صحيح. اطلب من المندوب رابط جديد" }, 404);
+        if (!z[2] && req.method === "GET") return await zOrders(env, uid);
+        if (z[2] && req.method === "POST") return await zStep(req, env, uid);
+      }
       const a = await auth(req, env);
       if (!a) return json({ error: "سجّل دخول تاني" }, 401);
       if (req.method === "POST" && url.pathname === "/api/sync") return await sync(req, env, a);
+      if (req.method === "POST" && url.pathname === "/api/link") return await linkMake(env, a);
+      if (req.method === "POST" && url.pathname === "/api/link/off") { await env.DB.prepare("DELETE FROM links WHERE user_id = ?").bind(a.uid).run(); return json({ ok: true }); }
       if (req.method === "GET" && url.pathname === "/api/me") return json(await env.DB.prepare("SELECT email, name FROM users WHERE id = ?").bind(a.uid).first() || {});
       if (req.method === "POST" && url.pathname === "/api/logout") {
         await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(a.h).run();
