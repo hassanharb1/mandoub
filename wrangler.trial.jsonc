@@ -10,6 +10,9 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
+  // reminders as push notifications: the cron pushes what came due (worker/push.js); the private key is the secret VAPID_JWK
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "vars": { "VAPID_PUBLIC": "BHunE7qGgJWge3Yz_YnWsUtrCp2AyWhtpjbVSWyf1CB0HueRJeK_aJrfSDgFsy_F4BYV7JLVB0TncPH2pC5xZms" },
   "d1_databases": [
     { "binding": "DB", "database_name": "salesgo", "database_id": "b3aa7c8b-38da-419e-b192-0bdd23006e65" }
   ]
