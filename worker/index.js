@@ -38,12 +38,34 @@ async function login(req, env) {
     return json({ error: "الإيميل أو الباسورد غلط" }, 401);
   }
   if (u.off) return json({ error: "الحساب ده متوقف. كلّم MESTK" }, 403);
-  const token = b64(crypto.getRandomValues(new Uint8Array(32)));
-  await env.DB.batch([
-    env.DB.prepare("UPDATE users SET fails = 0, lock_until = 0 WHERE id = ?").bind(u.id),
-    env.DB.prepare("INSERT INTO sessions (token_hash, user_id, created, seen) VALUES (?, ?, ?, ?)").bind(await sha256(token), u.id, now, now),
-  ]);
+  return newSession(env, u, [env.DB.prepare("UPDATE users SET fails = 0, lock_until = 0 WHERE id = ?").bind(u.id)]);
+}
+
+async function newSession(env, u, extra = []) {
+  const token = b64(crypto.getRandomValues(new Uint8Array(32))), now = Date.now();
+  await env.DB.batch([...extra,
+    env.DB.prepare("INSERT INTO sessions (token_hash, user_id, created, seen) VALUES (?, ?, ?, ?)").bind(await sha256(token), u.id, now, now)]);
   return json({ token, email: u.email, name: u.name || "" });
+}
+
+/* POST /api/signup {email, password, name}: anyone can open an account (each account sees only its own data).
+   At most SIGNUPS_PER_IP new accounts a day from one address, so nobody can flood the database. */
+const SIGNUPS_PER_IP = 5;
+async function signup(req, env) {
+  const { email, password, name } = await req.json().catch(() => ({}));
+  const e = String(email || "").trim().toLowerCase(), pw = String(password || ""), nm = String(name || "").trim().slice(0, 80);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 120) return json({ error: "اكتب إيميل صحيح" }, 400);
+  if (pw.length < 6) return json({ error: "الباسورد لازم 6 حروف أو أرقام على الأقل" }, 400);
+  if (pw.length > 200) return json({ error: "الباسورد طويل قوي" }, 400);
+  const ip = req.headers.get("cf-connecting-ip") || "", now = Date.now();
+  const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM signups WHERE ip = ? AND at > ?").bind(ip, now - 864e5).first();
+  if (n && n.n >= SIGNUPS_PER_IP) return json({ error: "اتعمل حسابات كتير من النت ده النهارده. جرّب بكرة" }, 429);
+  if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(e).first()) return json({ error: "الإيميل ده عليه حساب قبل كده. ادخل بيه" }, 409);
+  const u = { id: crypto.randomUUID(), email: e, name: nm };
+  return newSession(env, u, [
+    env.DB.prepare("INSERT INTO users (id, email, pass, name, created) VALUES (?, ?, ?, ?, ?)").bind(u.id, e, await hashPass(pw), nm, now),
+    env.DB.prepare("INSERT INTO signups (ip, at) VALUES (?, ?)").bind(ip, now),
+  ]);
 }
 
 async function auth(req, env) {
@@ -100,6 +122,7 @@ export default {
     if (!env.DB) return json({ error: "السيرفر لسه ما اتربطش بقاعدة البيانات" }, 503);
     try {
       if (req.method === "POST" && url.pathname === "/api/login") return await login(req, env);
+      if (req.method === "POST" && url.pathname === "/api/signup") return await signup(req, env);
       const a = await auth(req, env);
       if (!a) return json({ error: "سجّل دخول تاني" }, 401);
       if (req.method === "POST" && url.pathname === "/api/sync") return await sync(req, env, a);
