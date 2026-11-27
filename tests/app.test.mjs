@@ -166,3 +166,21 @@ test("a crash is reported: queued with its details (sent to /api/err when the se
   assert.equal(await page.evaluate(() => !!document.querySelector("#bootErr")), true, "the red banner didn't show");
   await page.context().close();
 });
+
+test("customer statement: running balance ends at what he owes, for each period; picture and text are ready", async () => {
+  const page = await phone(b, srv.url); await realData(page);
+  const cid = await page.evaluate(() => __T.S.customers.find(c => __T.S.payments.some(p => p.customerId === c.id)).id);
+  await click(page, '#nav [data-go="customers"]'); await wait(100);
+  await page.evaluate(id => __T.go("customer", id), cid); await wait(200);
+  await click(page, "#cStmt");
+  await page.waitForSelector("#stimg img", { timeout: 10000 });
+  for (const d of ["30", "90", "0"]) {
+    await click(page, `[data-sd="${d}"]`); await page.waitForSelector("#stimg img", { timeout: 10000 });
+    const txt = await page.evaluate(() => document.querySelector("#sttx").textContent), bal = await page.evaluate(id => Math.round(__T.balance(id)), cid);
+    assert.match(txt, new RegExp(`(عليه دلوقتي|ليه عندنا): ${Math.abs(bal).toLocaleString("en-US")} ج`), `period ${d}: the total doesn't match the balance`);
+  }
+  assert.match(await page.evaluate(() => document.querySelector("#sttx").textContent), /رصيد أول المدة/);
+  assert.equal(await page.evaluate(() => document.querySelector("#stimgb").disabled), false);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

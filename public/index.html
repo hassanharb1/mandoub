@@ -449,7 +449,7 @@ setTimeout(flushErr,5000);window.addEventListener("online",flushErr);
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=49; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=50; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -746,6 +746,7 @@ function vCustomer(v){
     ${ledger.slice(0,5).map(ledgerRow).join("")}
     ${ledger.length>5?`<button class="row more" id="cAll"><span class="main t">كل الحركات (<span class="num">${ledger.length}</span>)</span>${icon("chev","go")}</button>`:""}
     <button class="row" id="cOpen"><span class="main"><span class="t">رصيد أول المدة</span><br><span class="s">${c.openingDate?`لحد ${esc(fmtDay(c.openingDate))} · `:""}دوس علشان تعدله</span></span><span class="amt ${ob<0?"minus":""}">${ob<0?"ليه ":""}${money(Math.abs(ob))}</span></button></div>
+    <button class="btn ghost block" id="cStmt" style="margin-top:10px">${icon("send")}كشف حساب للعميل (صورة أو رسالة)</button>
     <p class="hint">عليه = رصيد أول المدة + الطلبات اللي اتبعتت + اللي زوّدته − التحصيل. دوس على أي حركة علشان تشوفها أو تعدلها.</p></section>
   ${al.length?`<div class="list">${al.map(alertRow).join("")}</div>`:""}
   ${reqs.length?`<section class="sec"><h2>مستني منك <span class="count num">${reqs.length}</span></h2><div class="list">${reqs.map(reqRow).join("")}</div></section>`:""}
@@ -760,7 +761,7 @@ function vCustomer(v){
   bindAlerts(v);bindOrderCards(v);bindReqRows(v);
   $("#cNew").onclick=()=>orderEditor({customerId:c.id});$("#cCol").onclick=()=>collectSheet(c.id);$("#cReq").onclick=()=>quickCapture(c.id);
   $("#cEdit").onclick=()=>customerSheet(c.id);$("#cOpen").onclick=()=>openingSheet(c.id);$("#cAdj").onclick=$("#cBal").onclick=()=>adjustSheet(c.id);bindMoves(v);
-  $("#cPays").onclick=()=>ledgerSheet(c.id,"pay");const ca=$("#cAll");if(ca)ca.onclick=()=>ledgerSheet(c.id,"all");
+  $("#cPays").onclick=()=>ledgerSheet(c.id,"pay");$("#cStmt").onclick=()=>stmtSheet(c.id);const ca=$("#cAll");if(ca)ca.onclick=()=>ledgerSheet(c.id,"all");
   const rp=$("#cRepeat");if(rp)rp.onclick=()=>orderEditor({customerId:c.id,items:orders[0].items.map(i=>({...i}))});
 }
 
@@ -893,7 +894,63 @@ function ledgerSheet(cid,mode){const c=cust(cid);let m=mode||"all";
       ${list.length?`<div class="list ledger">${list.map(ledgerRow).join("")}</div>`:`<div class="empty">${m==="pay"?"لسه ما دفعش ولا دفعة":m==="ord"?"مفيش طلبات محسوبة عليه لسه":"مفيش حركات"}</div>`}
       <p class="hint">الطلبات بتتحسب عليه من ساعة ما تتبعت، بالصافي بعد الخصم${S.ordFrom?` (من يوم ${esc(fmtDay(S.ordFrom))})`:""}.</p>`;
     bindMoves(sh)};
-  sh.addEventListener("click",e=>{const b=e.target.closest("[data-lg]");if(b){m=b.dataset.lg;draw()}});draw()}
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-lg]");if(b){m=b.dataset.lg;draw()}});draw();
+  sh.querySelector(".sb").insertAdjacentHTML("beforeend",`<button class="btn ghost block" id="lgSt" style="margin-top:12px">كشف حساب للعميل (صورة أو رسالة)</button>`);
+  sh.querySelector("#lgSt").onclick=()=>stmtSheet(cid)}
+/* ---------- كشف حساب للعميل: a statement to send him (picture or WhatsApp text) ----------
+   Lines oldest first with the balance after each; the period starts with what he owed before it («رصيد سابق»). */
+function stmtData(cid,days){const c=cust(cid),all=custLedger(cid).slice().sort((a,b)=>a.t-b.t),from=days?sod(Date.now())-(days-1)*DAY:0;
+  let bal=c.opening||0;const before=all.filter(l=>l.t<from),rows=[];before.forEach(l=>{bal+=l.d});
+  const open=bal;all.filter(l=>l.t>=from).forEach(l=>{bal+=l.d;rows.push({...l,bal})});
+  // a very long period keeps the last 60 lines; the rest folds into «رصيد سابق»
+  let carried=open,shown=rows;if(rows.length>60){shown=rows.slice(-60);carried=shown[0].bal-shown[0].d}
+  const label=l=>l.k.startsWith("ord:")?l.s.replace(" · من غير مبلغ، دوس وكمّل الأسعار",""):l.k.startsWith("pay:")?l.s.replace(/^تحصيل/,"دفعة"):l.s.replace("زوّدت عليه","زيادة على الحساب").replace("نزّلت من عليه","خصم من الحساب");
+  return {c,from,carried,rows:shown.map(l=>({...l,label:label(l)})),bal:balance(cid),hasOpen:!days||!before.length,since:days?from:(c.openingDate||null)}}
+const stmtHead=D=>D.from?`من ${fmtDay(D.from)} لحد ${fmtDay(Date.now())}`:`كل الحساب لحد ${fmtDay(Date.now())}`;
+function stmtText(D){const n=v=>Math.round(Math.abs(v)).toLocaleString("en-US");
+  return [`كشف حساب: ${D.c.name}`,stmtHead(D),"",`${D.from?"رصيد سابق":"رصيد أول المدة"}: ${D.carried<0?"ليه ":""}${n(D.carried)} ج`,
+    ...D.rows.map(l=>`• ${fmtDay(l.t)} · ${l.label}: ${l.d>=0?"+":"−"}${n(l.d)} ج`),"",
+    `${D.bal<0?"ليه عندنا":"عليه دلوقتي"}: ${n(D.bal)} ج`,S.settings.rep?`\nمن: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
+async function stmtImage(D){const F="Cairo,system-ui,Tahoma,sans-serif";try{await Promise.all([document.fonts.load(`800 40px Cairo`),document.fonts.load(`600 24px Cairo`)])}catch(e){}
+  const W=1080,P=44,RH=84,n=v=>Math.round(Math.abs(v)).toLocaleString("en-US"),H=244+(D.rows.length+1)*RH+(D.rows.length?0:60)+16+110+90;
+  const cv=document.createElement("canvas"),ctx=cv.getContext("2d");cv.width=W;cv.height=H;ctx.direction="rtl";ctx.textBaseline="middle";
+  const R=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
+  ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);R(0,0,W,190,0,"#282825");await drawSymbol(ctx,P,106,52);
+  ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;ctx.fillText("كشف حساب",W-P,58);
+  let fs=40;do{ctx.font=`800 ${fs}px ${F}`}while(ctx.measureText(D.c.name).width>W-2*P-200&&--fs>24);ctx.fillStyle="#E07A4F";ctx.fillText(D.c.name,W-P,112);
+  ctx.font=`600 26px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText([stmtHead(D),D.c.area].filter(Boolean).join(" · "),W-P,158);
+  // column heads: date | description (right) … amount | balance (left)
+  let y=214;ctx.font=`700 24px ${F}`;ctx.fillStyle="#6F6A60";ctx.textAlign="right";ctx.fillText("التاريخ والبيان",W-P-20,y);
+  ctx.textAlign="left";ctx.fillText("الرصيد",P+20,y);ctx.fillText("المبلغ",P+250,y);y+=30;
+  const row=(i,date,label,amt,bal,strong)=>{R(P,y,W-2*P,RH-8,16,strong?"#EDE5D9":i%2?"#FFFDF9":"#FFFFFF");ctx.textAlign="right";ctx.fillStyle="#282825";
+    let f=30;do{ctx.font=`700 ${f}px ${F}`}while(ctx.measureText(label).width>W-2*P-460&&--f>18);ctx.fillText(label,W-P-20,y+(date?28:38));
+    if(date){ctx.font=`600 21px ${F}`;ctx.fillStyle="#6F6A60";ctx.fillText(date,W-P-20,y+58)}
+    ctx.textAlign="left";ctx.direction="ltr";if(amt!=null){ctx.font=`800 28px ${F}`;ctx.fillStyle=amt>=0?"#B3262E":"#236444";ctx.fillText(`${amt>=0?"+":"−"}${n(amt)}`,P+250,y+38)}
+    ctx.font=`700 28px ${F}`;ctx.fillStyle="#282825";ctx.fillText(n(bal),P+20,y+38);
+    if(bal<0){const w=ctx.measureText(n(bal)).width;ctx.direction="rtl";ctx.textAlign="left";ctx.font=`600 22px ${F}`;ctx.fillStyle="#236444";ctx.fillText("ليه",P+28+w,y+40)}
+    ctx.direction="rtl";y+=RH};
+  row(0,"",D.from?"رصيد سابق":"رصيد أول المدة",null,D.carried,true);
+  D.rows.forEach((l,i)=>row(i+1,fmtDay(l.t),l.label,l.d,l.bal));
+  if(!D.rows.length){ctx.textAlign="center";ctx.font=`600 26px ${F}`;ctx.fillStyle="#6F6A60";ctx.fillText("مفيش حركات في الفترة دي",W/2,y+30);y+=60}
+  y+=16;R(P,y,W-2*P,110,22,D.bal>0?"#BD572F":"#236444");ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 36px ${F}`;ctx.fillText(D.bal<0?"ليه عندنا":"عليه دلوقتي",W-P-28,y+55);
+  ctx.textAlign="left";ctx.font=`800 44px ${F}`;ctx.fillText(`${n(D.bal)} ج`,P+28,y+55);
+  ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText(["SalesGo",S.settings.rep].filter(Boolean).join(" · "),W-P,H-40);ctx.textAlign="left";ctx.fillText("by MESTK",P,H-40);
+  return new Promise(r=>cv.toBlob(r,"image/jpeg",0.92))}
+function stmtSheet(cid){const c=cust(cid),ph=bcPhone(c);let days=30,file=null,txt="";
+  const sh=sheet(`كشف حساب ${c.name}`,`<div class="chips" id="stp">${[[30,"آخر شهر"],[90,"آخر 3 شهور"],[0,"كل الحساب"]].map(([d,t])=>`<button class="chip" data-sd="${d}">${t}</button>`).join("")}</div>
+    <div class="oimg" id="stimg"><span class="hint">بجهز الصورة…</span></div>
+    <details><summary class="link" style="cursor:pointer">شوف الرسالة</summary><div class="msg" id="sttx" style="margin-top:8px"></div></details>
+    <p class="hint">${ph?`«ابعت رسالة للعميل» بتفتح شات ${esc(c.name)} والكشف مكتوب. الصورة بتفتح المشاركة وتختار العميل.`:`العميل ملوش رقم، فالمشاركة هتفتح وتختار مين. ضيف رقمه من «تعديل» علشان الرسالة تروحله على طول.`}</p>`,
+    `<div class="btns"><button class="btn wa" id="stimgb" disabled>ابعت الصورة</button><button class="btn ghost" id="sttxb">${ph?"ابعت رسالة للعميل":"ابعت رسالة"}</button></div>`,{full:true});
+  const draw=()=>{sh.querySelectorAll("[data-sd]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.sd===days));
+    const D=stmtData(cid,days);txt=stmtText(D);sh.querySelector("#sttx").textContent=txt;file=null;const ib=sh.querySelector("#stimgb");ib.disabled=true;
+    sh.querySelector("#stimg").innerHTML=`<span class="hint">بجهز الصورة…</span>`;const my=days;
+    stmtImage(D).then(blob=>{if(!blob||!sh.isConnected||my!==days)return;file=new File([blob],`كشف-حساب-${c.name}.jpg`,{type:"image/jpeg"});
+      sh.querySelector("#stimg").innerHTML=`<img src="${URL.createObjectURL(blob)}" alt="كشف الحساب">`;ib.disabled=false}).catch(()=>{sh.querySelector("#stimg").innerHTML=`<span class="hint">مقدرتش أعمل الصورة، ابعت الرسالة</span>`})};
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-sd]");if(b){days=+b.dataset.sd;draw()}});
+  sh.querySelector("#stimgb").onclick=()=>{if(file)shareFile(file)};
+  sh.querySelector("#sttxb").onclick=()=>{if(ph)window.open(`https://wa.me/${ph}?text=${encodeURIComponent(txt)}`,"_blank","noopener");else shareText(txt)};
+  draw()}
 function bindMoves(v){v.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.mv.split(":");
   if(k==="pay")collectSheet(null,id);else if(k==="hand")handoverSheet(id);else if(k==="adj")adjustSheet(null,id);else orderSheet(id)})}
 function reqRow(r){return `<button class="row alert" data-r="${r.id}"><span class="dot info"></span><span class="main"><span class="t">${esc(cust(r.customerId).name)}</span><br><span class="s">${esc(r.text)} · ${esc(when(r.created))}</span></span></button>`}
