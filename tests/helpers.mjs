@@ -17,7 +17,7 @@ export function playwright() {
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp" };
 // everything the tests reach inside the app's script (functions, and S through a getter)
-const HOOK = `window.__T={get S(){return S},set S(v){S=v},balance,stmtData,total,ordOn,custLedger,parseNoteLine,matchCust,sameName,dupPairs,unsentPays,orderMoney,markSent,
+const HOOK = `window.__T={get S(){return S},set S(v){S=v},balance,stmtData,monthData,reportText,routeList,daySummary,mapsUrl,splitOrderText,parseOrderLine,matchProducts,total,ordOn,custLedger,parseNoteLine,matchCust,sameName,dupPairs,unsentPays,orderMoney,markSent,
   mergeSheet,multiSendSheet,collectSheet,noteSheet,orderEditor,sendSheet,ledgerSheet,go,render,save,closeSheet,signedIn,alerts};\n`;
 
 // serves ./public on a free port; index.html gets the hook right before the app boots
@@ -47,6 +47,8 @@ export async function browser() {
 // a 390×800 phone page; page.errors collects uncaught errors and console errors
 export async function phone(b, url, opts = {}) {
   const ctx = await b.newContext({ viewport: { width: opts.width || 390, height: 800 }, colorScheme: opts.dark ? "dark" : "light", serviceWorkers: "block" });
+  // the first-run guide is tested on its own; elsewhere it's already seen
+  if (!opts.guide) await ctx.addInitScript(() => { try { localStorage.setItem("mandoub.guide", "1"); } catch (e) {} });
   let page = null;
   ctx.on("page", p => { if (page && p !== page) p.close().catch(() => {}); }); // wa.me / share fallbacks open tabs
   page = await ctx.newPage();
