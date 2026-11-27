@@ -463,7 +463,7 @@ setTimeout(flushErr,5000);window.addEventListener("online",flushErr);
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=52; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=53; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -1165,6 +1165,12 @@ function dayColSection(){const list=dayPays(filt.dcDay),sum=list.reduce((a,p)=>a
 /* «النوتة»: the rep writes collections like in his phone notes, one per line: «محمد 500», «سيد 2 ألف قديمة».
    Each line is read live into name + amount + note; the name is matched to a customer (or asks which one when it's
    close to several, or becomes a new customer). The text is kept as a draft until saved. */
+/* «محمد 10000 ايفورا 10000 وايت» = two collections, one per company (the same name, each amount with its company word) */
+function expandNoteLine(raw){const t=String(raw).replace(/[٠-٩]/g,d=>d.charCodeAt(0)-1632).replace(/[۰-۹]/g,d=>d.charCodeAt(0)-1776).trim().split(/\s+/);
+  const nums=t.map((w,i)=>/^\d[\d,]*(\.\d+)?$/.test(w)?i:-1).filter(i=>i>=0);if(nums.length<2)return [raw];
+  const segs=nums.map((n,k)=>t.slice(n,k+1<nums.length?nums[k+1]:t.length).join(" "));
+  if(!segs.every(sg=>takeCo(sg).co))return [raw];
+  const name=t.slice(0,nums[0]).join(" ").replace(/[:\-–—،,]+$/,"");return segs.map(sg=>`${name} ${sg}`)}
 function parseNoteLine(raw){
   let l=raw.replace(/[٠-٩]/g,d=>d.charCodeAt(0)-1632).replace(/[۰-۹]/g,d=>d.charCodeAt(0)-1776).replace(/٬/g,",").replace(/٫/g,".")
     .replace(/^\s*(?:[-•*·]+|\d{1,2}\s*[-.)]\s+)\s*/,"").trim();
@@ -1229,13 +1235,13 @@ function noteSheet(iso){const dr=S.noteDraft||{};iso=iso||dr.day||isoDay(Date.no
     <label class="f">اكتب كل عميل في سطر: الاسم والمبلغ
       <textarea class="inp note" id="nt" rows="6" placeholder="محمد علي 500&#10;الحاج سيد 2 ألف&#10;معرض النور 1500 قديمة" autocomplete="off">${esc(dr.t||"")}</textarea></label>
     <div class="chips" id="nco"><span class="hint" style="align-self:center">الشركة:</span>${ALLCOS.map(c=>`<button type="button" class="chip" data-nco="${c.id}" aria-pressed="${dr.co===c.id}">${coDot(c.id)}${esc(c.name)}</button>`).join("")}<button type="button" class="chip" data-nco="" aria-pressed="${!dr.co}">مش محدد</button></div>
-    <p class="hint">ممكن تكتب ملحوظة بعد المبلغ (تحويل، باقي الحساب…). ولو الدفعة عن حساب قديم اكتب جنبها «قديمة». ولو سطر لشركة تانية اكتب اسمها جنبه («محمد 500 وايت»).</p>
+    <p class="hint">ممكن تكتب ملحوظة بعد المبلغ (تحويل، باقي الحساب…). ولو الدفعة عن حساب قديم اكتب جنبها «قديمة». ولو سطر لشركة تانية اكتب اسمها جنبه («محمد 500 وايت»)، ولو دفع للشركتين اكتبهم في نفس السطر («محمد 10000 ايفورا 10000 وايت»).</p>
     <div id="npv"></div>`,
     `<div class="total"><span>المجموع</span><span><span class="num" id="nsum">0</span> ج</span></div><button class="btn primary block" id="nsave">احفظ</button>`);
   bindDate("nday");const ta=sh.querySelector("#nt");let allCo=dr.co||"";
   sh.querySelector("#nco").addEventListener("click",e=>{const b=e.target.closest("[data-nco]");if(!b)return;allCo=b.dataset.nco;
     sh.querySelectorAll("[data-nco]").forEach(x=>x.setAttribute("aria-pressed",x===b));if(S.noteDraft){S.noteDraft.co=allCo;save()}draw()});
-  const lines=()=>ta.value.split("\n").map(parseNoteLine).filter(x=>x.raw).map(x=>{const k=norm(x.name).replace(/\s+/g," ").trim();
+  const lines=()=>ta.value.split("\n").flatMap(expandNoteLine).map(parseNoteLine).filter(x=>x.raw).map(x=>{const k=norm(x.name).replace(/\s+/g," ").trim();
     const m=x.name?matchCust(x.name):{cands:[]};const p=pick[k];
     const c=p&&p!=="new"?S.customers.find(y=>y.id===p):m.c;return {...x,k,c,isNew:p==="new"||(!c&&!m.cands.length),cands:c||p?[]:m.cands}});
   const draw=()=>{const ls=lines();const ok=ls.filter(x=>!x.err);
@@ -1947,6 +1953,10 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
     ${custSelect("pc",cid)}<div id="pbal" class="hint"></div>
     <label class="f">المبلغ<input class="inp num" id="pa" type="number" inputmode="decimal" placeholder="0" value="${p?p.amount:""}" style="text-align:right;direction:rtl"></label>
     <div class="f"><span>الشركة</span><div class="chips" id="pcoc">${ALLCOS.map(c=>`<button type="button" class="chip" data-pco="${c.id}">${coDot(c.id)}${esc(c.name)}</button>`).join("")}<button type="button" class="chip" data-pco="">مش محدد</button></div></div>
+    ${p||ALLCOS.length<2?"":`<button type="button" class="link sm" id="psplit" style="align-self:flex-start">الدفعة لأكتر من شركة؟ قسّمها</button>
+    <div class="card" id="psb" hidden><span class="hint">اكتب مبلغ كل شركة، وهيتسجلوا تحصيلين منفصلين</span>
+      ${ALLCOS.map(c=>`<label class="inrow" style="align-items:center"><span style="flex:0 0 110px">${coTag(c.id)}</span><input class="inp num" data-psa="${c.id}" type="number" inputmode="decimal" placeholder="0" style="text-align:right;direction:rtl"></label>`).join("")}
+      <div class="total"><span>المجموع</span><span><span class="num" id="pst">0</span> ج</span></div></div>`}
     ${dateField("pd",p?p.date:Date.now())}
     <div class="inrow" style="align-items:center"><button type="button" class="chip" id="pold" aria-pressed="${!!(p&&p.forDate)}" style="flex:none">دفعة قديمة</button>
       <label class="f" id="pforL" ${p&&p.forDate?"":"hidden"} style="flex-direction:row;align-items:center;gap:8px">عن يوم<input class="inp num" id="pfor" type="date" max="${isoDay(Date.now())}" value="${p&&p.forDate?isoDay(p.forDate):""}" style="direction:ltr"></label></div>
@@ -1963,7 +1973,17 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
   $("#pc").onchange=()=>{upd();if(!p){pco=lastCo($("#pc").value);showCo()}};
   sh.querySelector("#pold").onclick=e=>{const on=e.currentTarget.getAttribute("aria-pressed")!=="true";e.currentTarget.setAttribute("aria-pressed",on);$("#pforL").hidden=!on;
     if(on&&!$("#pfor").value)$("#pfor").value=isoDay(fromIso($("#pd").value)-7*DAY)};
+  // split between companies: the amount field becomes the sum of the parts
+  let split=false;const parts=()=>[...sh.querySelectorAll("[data-psa]")].map(i=>({co:i.dataset.psa,a:parseFloat(i.value)||0})).filter(x=>x.a>0);
+  sh.querySelector("#psplit")?.addEventListener("click",()=>{split=!split;sh.querySelector("#psb").hidden=!split;$("#pa").disabled=split;sh.querySelector("#pcoc").closest(".f").hidden=split;
+    sh.querySelector("#psplit").textContent=split?"لأ، شركة واحدة":"الدفعة لأكتر من شركة؟ قسّمها";if(split)sh.querySelector("[data-psa]").focus()});
+  sh.addEventListener("input",e=>{if(!e.target.closest("[data-psa]"))return;const t=parts().reduce((x,y)=>x+y.a,0);$("#pst").textContent=t.toLocaleString("en-US");$("#pa").value=t||""});
   const keep=share=>{const c=$("#pc").value,a=parseFloat($("#pa").value);if(!c)return toast("اختار العميل");if(!(a>0))return toast("اكتب المبلغ");
+    if(split&&!p){const ps=parts();if(ps.length<1)return toast("اكتب مبلغ شركة واحدة على الأقل");
+      const isOld0=sh.querySelector("#pold").getAttribute("aria-pressed")==="true";if(isOld0&&!$("#pfor").value)return toast("اختار الدفعة القديمة عن أنهي يوم");
+      const base={customerId:c,date:fromIso($("#pd").value),note:$("#pn").value.trim()},made=ps.map(x=>{const y={id:uid(),...base,amount:x.a,co:x.co,at:Date.now()};if(isOld0)y.forDate=fromIso($("#pfor").value);S.payments.push(y);return y});
+      save();closeSheet();toast(`اتسجل ${made.length===1?"تحصيل":`${made.length} تحصيلات`} · ${a.toLocaleString("en-US")} ج · بقى معاك ${Math.round(cashInHand()).toLocaleString("en-US")} ج`);render();
+      if(share)shareText(made.map(payMessage).join("\n\n")).then(ok=>{if(ok){markSent(made);render()}});return}
     const isOld=sh.querySelector("#pold").getAttribute("aria-pressed")==="true";if(isOld&&!$("#pfor").value)return toast("اختار الدفعة القديمة عن أنهي يوم");
     const d={customerId:c,amount:a,date:fromIso($("#pd").value,p&&p.date),note:$("#pn").value.trim(),co:pco||undefined};
     let x=p;if(x){if(x.sent&&(x.amount!==d.amount||x.customerId!==d.customerId))delete x.sent;Object.assign(x,d)}else{x={id:uid(),...d,at:Date.now()};S.payments.push(x)}
