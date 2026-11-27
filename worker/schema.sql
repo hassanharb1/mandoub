@@ -65,3 +65,19 @@ CREATE TABLE IF NOT EXISTS recovery (
   hash    TEXT NOT NULL,
   created INTEGER NOT NULL
 );
+-- what broke on the phones (POST /api/err): one row per error + version, with a count; kept 60 days
+CREATE TABLE IF NOT EXISTS errors (
+  key     TEXT PRIMARY KEY,   -- sha-256 of message|file|line|version
+  first   INTEGER NOT NULL,
+  last    INTEGER NOT NULL,
+  count   INTEGER NOT NULL,
+  user_id TEXT,               -- when the phone was signed in
+  ver     INTEGER, view TEXT, kind TEXT, msg TEXT, src TEXT, line INTEGER, col INTEGER, stack TEXT, ua TEXT
+);
+CREATE INDEX IF NOT EXISTS errors_last ON errors (last);
+CREATE TABLE IF NOT EXISTS err_ips (
+  ip  TEXT NOT NULL,
+  day INTEGER NOT NULL,
+  n   INTEGER NOT NULL,
+  PRIMARY KEY (ip, day)
+);

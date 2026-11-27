@@ -225,9 +225,37 @@ async function colleaguePage(req, env) {
   return r;
 }
 
+/* POST /api/err {errors:[…]}: what broke on a phone (index.html reportErr). No sign-in needed (boot errors happen before it);
+   the same error (message + file + line + version) is one row with a count; at most 200 reports a day from one address. */
+async function saveErrors(req, env) {
+  const { errors } = await req.json().catch(() => ({}));
+  const list = (Array.isArray(errors) ? errors : []).slice(0, 20), ip = req.headers.get("cf-connecting-ip") || "", now = Date.now();
+  if (!list.length) return json({ ok: true });
+  const seen = await env.DB.prepare("SELECT COALESCE(SUM(n), 0) AS n FROM err_ips WHERE ip = ? AND day = ?").bind(ip, Math.floor(now / 864e5)).first();
+  if (seen && seen.n >= 200) return json({ ok: true, dropped: list.length });
+  const a = await auth(req, env).catch(() => null), str = (v, n) => String(v ?? "").slice(0, n);
+  const st = [env.DB.prepare("INSERT INTO err_ips (ip, day, n) VALUES (?, ?, ?) ON CONFLICT (ip, day) DO UPDATE SET n = n + excluded.n").bind(ip, Math.floor(now / 864e5), list.length)];
+  for (const e of list) {
+    const key = await sha256([e.msg, e.src, e.line, e.ver].join("|"));
+    st.push(env.DB.prepare(`INSERT INTO errors (key, first, last, count, user_id, ver, view, kind, msg, src, line, col, stack, ua)
+      VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (key) DO UPDATE SET last = excluded.last, count = errors.count + 1, user_id = COALESCE(excluded.user_id, errors.user_id), view = excluded.view, ua = excluded.ua`)
+      .bind(key, now, now, a ? a.uid : null, +e.ver || 0, str(e.view, 30), str(e.kind, 20), str(e.msg, 300), str(e.src, 80), +e.line || 0, +e.col || 0, str(e.stack, 1500), str(e.ua, 200)));
+  }
+  await env.DB.batch(st);
+  return json({ ok: true });
+}
+
 export default {
   // every 15 minutes (wrangler triggers): push the reminders that came due
-  async scheduled(ev, env, ctx) { ctx.waitUntil(runPush(env)); },
+  async scheduled(ev, env, ctx) {
+    ctx.waitUntil(runPush(env));
+    // housekeeping, at most once an hour: old error reports and per-address counters
+    if (new Date().getUTCMinutes() < 15) ctx.waitUntil(env.DB.batch([
+      env.DB.prepare("DELETE FROM errors WHERE last < ?").bind(Date.now() - 60 * 864e5),
+      env.DB.prepare("DELETE FROM err_ips WHERE day < ?").bind(Math.floor(Date.now() / 864e5) - 2),
+      env.DB.prepare("DELETE FROM signups WHERE at < ?").bind(Date.now() - 2 * 864e5)]).catch(() => {}));
+  },
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/z/")) return colleaguePage(req, env);
@@ -237,6 +265,7 @@ export default {
       if (req.method === "POST" && url.pathname === "/api/login") return await login(req, env);
       if (req.method === "POST" && url.pathname === "/api/signup") return await signup(req, env);
       if (req.method === "POST" && url.pathname === "/api/reset") return await reset(req, env);
+      if (req.method === "POST" && url.pathname === "/api/err") return await saveErrors(req, env);
       const z = url.pathname.match(/^\/api\/z\/([A-Za-z0-9_-]+)(\/step)?$/);
       if (z) {
         const uid = await linkUser(env, z[1]);
