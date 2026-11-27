@@ -283,3 +283,25 @@ test("companies: each has its colour and name tag; collections carry the company
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test("one payment for two companies: split in the collection sheet, or one line in النوتة, becomes a collection per company", async () => {
+  const page = await phone(b, srv.url); await realData(page);
+  assert.deepEqual(await page.evaluate(() => [__T.expandNoteLine("محمد 10000 ايفورا 10000 وايت"), __T.expandNoteLine("سيد ٢ ألف وايت ٣ ألف ايفورا"), __T.expandNoteLine("علي 500 فاتورة 12"), __T.expandNoteLine("النور 1,200 تحويل")]),
+    [["محمد 10000 ايفورا", "محمد 10000 وايت"], ["سيد 2 ألف وايت", "سيد 3 ألف ايفورا"], ["علي 500 فاتورة 12"], ["النور 1,200 تحويل"]]);
+  const c = await page.evaluate(() => __T.S.customers[0]), n0 = await page.evaluate(() => __T.S.payments.length);
+  await page.evaluate(() => __T.noteSheet()); await wait(150);
+  await page.fill("#nt", `${c.name} 10000 ايفورا 10000 وايت`); await wait(200);
+  assert.match(await page.evaluate(() => document.querySelector("#nsave").textContent), /احفظ 2/);
+  await click(page, "#nsave"); await wait(300);
+  assert.deepEqual(await page.evaluate(() => __T.S.payments.slice(-2).map(p => [p.amount, p.co])), [[10000, "ev"], [10000, "wl"]]);
+  await page.evaluate(() => __T.closeSheet());
+  await page.evaluate(id => __T.collectSheet(id), c.id); await wait(150);
+  await click(page, "#psplit"); await wait(100);
+  await page.fill('[data-psa="ev"]', "4000"); await page.fill('[data-psa="wl"]', "6000"); await wait(100);
+  assert.equal(await page.evaluate(() => document.querySelector("#pa").value), "10000");
+  await click(page, "#ps"); await wait(300);
+  assert.deepEqual(await page.evaluate(() => __T.S.payments.slice(-2).map(p => [p.amount, p.co])), [[4000, "ev"], [6000, "wl"]]);
+  assert.equal(await page.evaluate(() => __T.S.payments.length), n0 + 4);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
