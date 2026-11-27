@@ -184,3 +184,80 @@ test("customer statement: running balance ends at what he owes, for each period;
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test("an order written as text: counts, cartons, sizes, colours and codes find the right products; unsure lines ask", async () => {
+  const page = await phone(b, srv.url);
+  const r = await page.evaluate(() => ["20 سبوت عيون 12 وات ابيض", "5 كرتونة كشاف ايفورا 100 وات", "3 تراك عيون متحرك 12w اسود", "4 EV-400", "8 سلندر فارغ 15 سم", "7 لمبة كاسة", "2 مروحة سقف"]
+    .map(l => { const x = __T.parseOrderLine(l), m = __T.matchProducts(x, 3); return { q: x.qty, u: x.unit, c: x.color, top: m[0] && m[0].p.name, sure: m.sure, n: m.length }; }));
+  assert.deepEqual(r[0], { q: 20, u: "ق", c: "ابيض", top: "سبوت عيون 12 وات", sure: true, n: r[0].n });
+  assert.deepEqual([r[1].q, r[1].u, r[1].top, r[1].sure], [5, "ك", "كشاف إيفورا 100 وات", true]);
+  assert.deepEqual([r[2].c, r[2].top, r[2].sure], ["اسود", "تراك عيون متحرك 12 وات", true]);
+  assert.deepEqual([r[3].q, r[3].top, r[3].sure], [4, "دلاية ماسورة فارغ", true]);
+  assert.deepEqual([r[4].top, r[4].sure], ["سلندر فارغ 15 سم", true]);
+  assert.equal(r[5].sure, false, "an unclear line didn't ask"); assert.ok(r[5].n > 1);
+  assert.equal(r[6].n, 0, "a product that isn't in the list matched something");
+  assert.deepEqual(await page.evaluate(() => __T.splitOrderText("20 لمبة 12 وات و 5 سبوت عيون، 3 دلاية")), ["20 لمبة 12 وات", "5 سبوت عيون", "3 دلاية"]);
+  // in the order screen: write, pick the unclear one, add
+  await page.evaluate(() => __T.orderEditor({ customerId: __T.S.customers[0].id })); await wait(300);
+  await click(page, "#otxt"); await wait(150);
+  await page.fill("#otx", "20 سبوت عيون 12 وات ابيض\n7 لمبة كاسة\n2 مروحة سقف"); await wait(150);
+  assert.equal(await page.evaluate(() => document.querySelector("#oadd").disabled), true);
+  await click(page, ".nask [data-op]"); await wait(100);
+  await click(page, "#oadd"); await wait(300);
+  assert.match(await page.evaluate(() => document.querySelector("#ocount").textContent), /3 أصناف/);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test("today's route: why each customer is on it, «زرته» moves him to the bottom, the day summary, and maps links", async () => {
+  const page = await phone(b, srv.url); await realData(page);
+  const L = await page.evaluate(() => __T.routeList().map(x => ({ id: x.c.id, why: x.why.join(" · "), done: x.done })));
+  assert.ok(L.length >= 3, "the demo should give a few customers to visit");
+  assert.ok(L.every(x => x.why), "a customer is on the route with no reason");
+  assert.ok(L.some(x => /مستني/.test(x.why)) && L.some(x => /عليه/.test(x.why)) && L.some(x => /طلبه/.test(x.why)));
+  await click(page, "#hRoute"); await wait(200);
+  await click(page, "[data-rv]"); await wait(150);
+  const after = await page.evaluate(() => __T.routeList());
+  assert.equal(after[after.length - 1].done, true, "a visited customer didn't go to the bottom");
+  assert.match(await page.evaluate(() => __T.daySummary()), /زرت 1 عميل/);
+  const urls = await page.evaluate(() => [__T.mapsUrl({ name: "النور", area: "العصافرة" }), __T.mapsUrl({ name: "x", loc: { lat: 31.2, lng: 29.9 } })]);
+  assert.match(urls[0], /maps\/search\/\?api=1&query=/); assert.match(urls[1], /destination=31\.2,29\.9/);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test("monthly report: orders, collections, best customers and products add up; the picture renders", async () => {
+  const page = await phone(b, srv.url); await realData(page);
+  const R = await page.evaluate(() => { const d = new Date(); return __T.monthData(d.getFullYear(), d.getMonth()); });
+  const check = await page.evaluate(() => { const d = new Date(), a = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const os = __T.S.orders.filter(o => o.status !== "draft" && ((o.hist && o.hist.sent) || o.created) >= a);
+    return { n: os.length, net: Math.round(os.reduce((x, o) => x + __T.total(o), 0)), pays: __T.S.payments.filter(p => p.date >= a).reduce((x, p) => x + p.amount, 0) }; });
+  assert.equal(R.orders, check.n); assert.equal(Math.round(R.net), check.net); assert.equal(R.pays, check.pays);
+  assert.ok(R.topC.length > 0 && R.topC.every((x, i, l) => !i || l[i - 1].sum >= x.sum), "best customers aren't sorted");
+  assert.match(await page.evaluate(R => __T.reportText(R), R), /تقرير شهر/);
+  await click(page, '#nav [data-go="money"]'); await wait(100);
+  await click(page, "#mRep"); await page.waitForSelector("#rpimg img", { timeout: 10000 });
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test("the one main button opens the four everyday actions; the first-run guide shows once and comes back from settings; rare settings are folded", async () => {
+  const page = await phone(b, srv.url, { guide: true });
+  await page.waitForSelector(".guide", { timeout: 3000 });
+  assert.match(await page.evaluate(() => document.querySelector(".guide h2").textContent), /اكتب الطلب/);
+  await click(page, "#gnext"); await click(page, "#gnext"); await click(page, "#gnext"); await wait(100);
+  assert.equal(await page.$(".guide"), null, "the guide didn't close");
+  await page.reload(); await page.waitForFunction(() => window.__T); await wait(1000);
+  assert.equal(await page.$(".guide"), null, "the guide showed twice");
+  await click(page, "#fab"); await wait(150);
+  assert.equal(await page.evaluate(() => document.querySelectorAll("[data-nm]").length), 4);
+  await click(page, '[data-nm="order"]'); await wait(300);
+  assert.match(await page.evaluate(() => document.querySelector(".sheet h3").textContent), /طلب جديد/);
+  await page.evaluate(() => __T.closeSheet());
+  await click(page, "#settingsBtn"); await wait(150);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector(".sec.fold .btns, .sec.fold .card, .sec.fold .list")).display), "none", "a rare section isn't folded");
+  await click(page, "#sguide"); await wait(150);
+  assert.ok(await page.$(".guide"), "«شرح البرنامج» didn't bring the guide back");
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

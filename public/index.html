@@ -181,6 +181,16 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.6}
 .mrow{gap:12px}.mrow .tick{flex:none;width:28px;height:28px;border-radius:8px;border:2px solid var(--border);display:grid;place-items:center;font-weight:800;color:var(--onAction)}
 .mrow[aria-pressed="true"] .tick{background:var(--action);border-color:var(--action)}
 .dqa{display:flex;flex-direction:column;gap:10px}
+.nmenu{display:flex;flex-direction:column;gap:10px}.nmenu button{display:flex;gap:14px;align-items:center;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-height:72px}
+.nmenu .ic{font-size:30px;flex:none}.nmenu b{display:block;font-size:18px}.nmenu small{color:var(--muted);font-size:14px}
+.sec.fold>h2{cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}.sec.fold>h2::after{content:"‹";transform:rotate(-90deg);color:var(--muted);font-size:22px;line-height:1}
+.sec.fold:not(.open)>*:not(h2){display:none}.sec.fold.open>h2::after{transform:rotate(90deg)}
+.guide{position:fixed;inset:0;z-index:95;background:rgba(20,20,18,.6);display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.gcard{background:var(--surface);border-radius:24px;padding:28px 22px 18px;width:min(100%,460px);text-align:center;display:flex;flex-direction:column;gap:12px}
+.gcard .gic{font-size:56px;line-height:1}.gcard h2{margin:0;font-size:24px}.gcard p{margin:0;color:var(--muted);font-size:16px;line-height:1.8}
+.gdots{display:flex;gap:6px;justify-content:center;margin:4px 0}.gdots i{width:8px;height:8px;border-radius:50%;background:var(--line)}.gdots i.on{background:var(--action);width:22px;border-radius:4px}
+.acard.route{margin:4px 0 8px}.locrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:-2px 0 10px}.locrow .btn.sm{flex:none}
+.rth{font-size:16px;margin:16px 0 8px;color:var(--muted)}.rtc{margin-bottom:10px}.rtc.done{opacity:.7}.rtc .btns{flex-wrap:wrap}.rtc .btns .btn{flex:1 1 30%;min-width:0}
 #settingsBtn{position:relative}#settingsBtn.syerr::after{content:"";position:absolute;top:6px;inset-inline-start:6px;width:10px;height:10px;border-radius:50%;background:var(--bad);border:2px solid var(--surface)}
 .dupbar{margin-bottom:12px}.dupc{margin-bottom:12px}.dupc .row{padding-inline:0}.dupc .btns{margin-top:8px}
 .row[aria-pressed="true"]{background:var(--accent-soft)}
@@ -414,7 +424,7 @@ textarea.note{min-height:150px;font-size:16px;line-height:1.9}
   <main id="view"></main>
 </div>
 
-<button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>سجّل بسرعة</button>
+<button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>جديد</button>
 
 <nav class="bottom"><div class="in" id="nav"><div class="navbrand"><img class="lt" src="logo-light.svg" alt="SalesGo by MESTK"><img class="dk" src="logo-dark.svg" alt="SalesGo by MESTK"></div>
   <button data-go="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 3l9 7v11h-7v-7h-4v7H3z"/></svg>النهارده</button>
@@ -449,7 +459,7 @@ setTimeout(flushErr,5000);window.addEventListener("online",flushErr);
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=50; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=51; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -630,7 +640,7 @@ function stopMic(){micT.forEach(clearTimeout);micT=[];const r=rec;rec=null;try{r
 document.addEventListener("click",e=>{const b=e.target.closest("[data-mic]");if(!b)return;
   if(rec){stopMic();return}const inp=document.getElementById(b.dataset.mic);
   try{rec=new SR();rec.lang="ar-EG";rec.interimResults=true;rec.continuous=false;const base=inp.value?inp.value+" ":"";
-    rec.onresult=ev=>{heard=true;let t="";for(const r of ev.results)t+=r[0].transcript;inp.value=base+t};
+    rec.onresult=ev=>{heard=true;let t="";for(const r of ev.results)t+=r[0].transcript;inp.value=base+t;inp.dispatchEvent(new Event("input",{bubbles:true}))};
     rec.onerror=ev=>{toast(ev.error==="not-allowed"?"المايك مش متاح هنا، اسمح بيه من إعدادات المتصفح":"ماسمعتش كويس، جرب تاني");stopMic()};
     rec.onend=()=>stopMic();heard=false;rec.start();micBtn=b;b.classList.add("on");toast("اتكلم دلوقتي…");
     micT.push(setTimeout(()=>{if(rec&&!heard){toast("ماسمعتش حاجة. جرب المايك اللي في الكيبورد");stopMic()}},8000));
@@ -660,7 +670,15 @@ if(history.pushState){try{if(!history.state||history.state.mb!==1){history.repla
     // Home: stay one step before the edge; a second back now leaves, otherwise the guard comes back
     backArm=Date.now();toast("دوس رجوع تاني علشان تخرج");backT=setTimeout(backGuard,2500)})}
 $("#nav").addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(b)go(b.dataset.go)});
-$("#fab").addEventListener("click",()=>quickCapture(route.v==="customer"?route.arg:null));
+$("#fab").addEventListener("click",()=>newMenu(route.v==="customer"?route.arg:null));
+// the one main button: what the rep does all day, big
+function newMenu(cid){const c=cid&&cust(cid);const sh=sheet(c?`جديد لـ ${c.name}`:"عايز تعمل إيه؟",`<div class="nmenu">
+    <button data-nm="order"><span class="ic">🧾</span><span><b>طلب جديد</b><small>اكتبه زي النوتة أو اختار من المنتجات</small></span></button>
+    <button data-nm="pay"><span class="ic">💵</span><span><b>تحصيل</b><small>${c?"سجّل فلوس استلمتها منه":"النوتة: اسم العميل والمبلغ في كل سطر"}</small></span></button>
+    <button data-nm="req"><span class="ic">⏳</span><span><b>عميل مستني حاجة</b><small>صنف مش موجود، أو حاجة توعده بيها</small></span></button>
+    ${c?"":`<button data-nm="route"><span class="ic">🗺️</span><span><b>خط سير النهارده</b><small>تعدّي على مين النهارده</small></span></button>`}</div>`);
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-nm]");if(!b)return;const k=b.dataset.nm;closeSheet();
+    if(k==="order")orderEditor(c?{customerId:c.id}:undefined);else if(k==="pay")c?collectSheet(c.id):noteSheet();else if(k==="req")quickCapture(cid);else routeSheet()})}
 $("#settingsBtn").addEventListener("click",settingsSheet);
 
 function setTitle(t,sub){$("#title").innerHTML=esc(t)+(sub?`<small>${esc(sub)}</small>`:"")}
@@ -695,6 +713,7 @@ function vHome(v){
   <div class="hstats"><div class="stat"><div class="lbl">عند العملاء</div><div class="v">${money(S.customers.reduce((a,c)=>a+Math.max(0,balance(c.id)),0))}</div></div>
     <button class="stat" id="hColSum"><div class="lbl">${S.colFrom?`تحصيل من ${esc(fmtDay(S.colFrom))}`:"تحصيل النهارده"}</div><div class="v">${money(colToday)}</div></button></div>
   <div class="hbtns"><button class="btn primary" id="hNew">${icon("plus")}طلب جديد</button><button class="btn ghost" id="hNote">${icon("edit")}سجّل تحصيل</button></div>
+  ${(()=>{const r=routeList(),left=r.filter(x=>!x.done).length;return S.customers.length?`<button class="acard route" id="hRoute"><span class="main"><span class="t">🗺️ خط سير النهارده</span><span class="s">${left?`${left} عميل تعدّي عليهم${r.length-left?` · زرت ${r.length-left}`:""}`:r.length?`✓ زرت الكل (${r.length})`:"مفيش حد مستعجل النهارده"}</span></span>${icon("chev","go")}</button>`:""})()}
   <section class="sec"><h2>محتاج تفتكر ${al.length?`<span class="count num">${al.length}</span>`:""}${al.length>3?`<button class="link" id="hMore">${filt.homeAll?"اقفل":"الكل"}</button>`:""}</h2>
     ${al.length?`<div class="alist">${shown.map(alertRow).join("")}</div>`:`<div class="empty">${icon("check")} كله تمام، مفيش حاجة متأخرة</div>`}</section>
   <section class="sec"><h2>آخر الطلبات <button class="link" id="hAll">كل الطلبات</button></h2>
@@ -702,7 +721,7 @@ function vHome(v){
   <p class="tagline">SalesGo by MESTK</p>`;
   bindAlerts(v);bindOrderCards(v);
   const bk=$("#bkNow");if(bk)bk.onclick=()=>{backup();render()};
-  $("#hNew").onclick=()=>orderEditor();$("#hNote").onclick=()=>noteSheet();const hm=$("#hMore");if(hm)hm.onclick=()=>{filt.homeAll=!filt.homeAll;render()};$("#hColSum").onclick=colSheet;$("#hAll").onclick=()=>go("orders");
+  $("#hNew").onclick=()=>orderEditor();const hr=$("#hRoute");if(hr)hr.onclick=routeSheet;$("#hNote").onclick=()=>noteSheet();const hm=$("#hMore");if(hm)hm.onclick=()=>{filt.homeAll=!filt.homeAll;render()};$("#hColSum").onclick=colSheet;$("#hAll").onclick=()=>go("orders");
 }
 
 function vCustomers(v){
@@ -740,6 +759,9 @@ function vCustomer(v){
     <div class="stat"><div class="lbl">بيطلب كل</div><div class="v" style="font-size:14px">${rh?`${rh.avg} يوم`:"—"}</div></div>
   </div>
   <div class="btns"><button class="btn primary" id="cNew">طلب جديد</button><button class="btn dark" id="cCol">تحصيل</button><button class="btn ghost" id="cReq">مستني حاجة</button></div>
+  <div class="locrow">${c.loc?`<a class="btn ghost sm" href="${esc(mapsUrl(c))}" target="_blank" rel="noopener">📍 وديني</a><button class="link sm" id="cLoc">غيّر المكان لمكانك دلوقتي</button>`
+    :`<button class="btn ghost sm" id="cLoc">📍 احفظ مكان المحل (وانت عنده)</button>${c.area?`<a class="link sm" href="${esc(mapsUrl(c))}" target="_blank" rel="noopener">دوّر على الخريطة</a>`:""}`}
+    ${c.visited&&c.visited>=sod(Date.now())?`<span class="pill ok">✓ زرته النهارده</span>`:`<button class="link sm" id="cVis">✓ زرته النهارده</button>`}</div>
   <section class="sec"><h2>الحساب والدفعات <button class="link" id="cAdj">ظبط الحساب</button></h2>
     <button class="paysum" id="cPays">${pays.length?`${pays.length===1?"دفع دفعة واحدة":`دفع <b class="num">${pays.length}</b> ${pays.length<=10?"دفعات":"دفعة"}`} · الإجمالي <b>${money(paid)}</b> ج<br><span class="s">آخر دفعة: ${esc(dayLabel(lastPay))}</span>`:`لسه ما دفعش ولا دفعة`}<span class="go">كل دفعاته ›</span></button>
     <div class="list ledger">
@@ -761,7 +783,7 @@ function vCustomer(v){
   bindAlerts(v);bindOrderCards(v);bindReqRows(v);
   $("#cNew").onclick=()=>orderEditor({customerId:c.id});$("#cCol").onclick=()=>collectSheet(c.id);$("#cReq").onclick=()=>quickCapture(c.id);
   $("#cEdit").onclick=()=>customerSheet(c.id);$("#cOpen").onclick=()=>openingSheet(c.id);$("#cAdj").onclick=$("#cBal").onclick=()=>adjustSheet(c.id);bindMoves(v);
-  $("#cPays").onclick=()=>ledgerSheet(c.id,"pay");$("#cStmt").onclick=()=>stmtSheet(c.id);const ca=$("#cAll");if(ca)ca.onclick=()=>ledgerSheet(c.id,"all");
+  $("#cPays").onclick=()=>ledgerSheet(c.id,"pay");const cl=$("#cLoc");if(cl)cl.onclick=()=>saveLoc(c.id);const cv=$("#cVis");if(cv)cv.onclick=()=>{markVisit(c.id);render()};$("#cStmt").onclick=()=>stmtSheet(c.id);const ca=$("#cAll");if(ca)ca.onclick=()=>ledgerSheet(c.id,"all");
   const rp=$("#cRepeat");if(rp)rp.onclick=()=>orderEditor({customerId:c.id,items:orders[0].items.map(i=>({...i}))});
 }
 
@@ -951,6 +973,111 @@ function stmtSheet(cid){const c=cust(cid),ph=bcPhone(c);let days=30,file=null,tx
   sh.querySelector("#stimgb").onclick=()=>{if(file)shareFile(file)};
   sh.querySelector("#sttxb").onclick=()=>{if(ph)window.open(`https://wa.me/${ph}?text=${encodeURIComponent(txt)}`,"_blank","noopener");else shareText(txt)};
   draw()}
+/* ---------- where the shop is: saved where the rep stands (c.loc {lat,lng,acc,at}); «وديني» opens Google Maps directions ---------- */
+const mapsUrl=c=>c.loc?`https://www.google.com/maps/dir/?api=1&destination=${c.loc.lat},${c.loc.lng}`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([c.name,c.area].filter(Boolean).join(" "))}`;
+function saveLoc(cid){const c=cust(cid);if(!navigator.geolocation)return toast("الموبايل ده مش بيدي المكان");toast("بجيب مكانك…");
+  navigator.geolocation.getCurrentPosition(p=>{c.loc={lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy||0),at:Date.now()};save();render();
+      toast(p.coords.accuracy>150?`اتحفظ ✓ بس الدقة ضعيفة (${Math.round(p.coords.accuracy)} م)، جرّب تاني برا المحل`:"اتحفظ مكان المحل ✓")},
+    e=>toast(e.code===1?"لازم تسمح للبرنامج يعرف مكانك (من إعدادات كروم للموقع)":"مقدرتش أعرف المكان، افتح الـ GPS وجرّب تاني"),{enableHighAccuracy:true,timeout:15000,maximumAge:60000})}
+function markVisit(cid){const c=cust(cid);c.visited=Date.now();save()}
+/* ---------- today's route: who to pass by and why, by area; «زرته» puts him at the bottom ---------- */
+function routeList(){const today=sod(Date.now()),out=[];
+  S.customers.forEach(c=>{const why=[];let score=0;
+    const r=rhythm(c.id);if(r&&r.since>=r.avg){why.push(r.late?`اتأخر عن طلبه (كل ${r.avg} يوم)`:`ميعاد طلبه (كل ${r.avg} يوم)`);score+=r.late?3:2}
+    const b=balance(c.id),lp=lastPayment(c.id);if(b>0&&daysSince(lp||S.since||Date.now())>=14){why.push(`عليه ${Math.round(b).toLocaleString("en-US")} ج`);score+=2}
+    const rq=S.requests.filter(x=>x.customerId===c.id&&!x.done);if(rq.length){why.push(`مستني: ${rq[0].text}`);score+=2}
+    if(S.orders.some(o=>o.customerId===c.id&&o.status==="draft")){why.push("عنده طلب ما اتبعتش");score+=1}
+    const done=!!(c.visited&&c.visited>=today);if(why.length||done)out.push({c,why,score,done})});
+  return out.sort((a,b)=>a.done-b.done||(a.c.area||"ي").localeCompare(b.c.area||"ي","ar")||b.score-a.score)}
+function routeSheet(){const sh=sheet("خط سير النهارده",`<div id="rtl"></div>`,`<button class="btn wa block" id="rtsum">ابعت ملخص اليوم</button>`,{full:true});
+  const draw=()=>{const L=routeList(),left=L.filter(x=>!x.done);let area=null;
+    sh.querySelector("#rtl").innerHTML=(L.length?`<p class="hint">العملاء اللي محتاجين زيارة النهارده، مترتبين بالمنطقة. دوس «زرته» بعد ما تعدّي.</p>`:`<div class="empty">مفيش حد محتاج زيارة النهارده ✓</div>`)+
+      L.map(x=>{const a=x.done?"زرتهم النهارده":(x.c.area||"من غير منطقة"),head=a!==area?`<h3 class="rth">${esc(a)}${x.done?"":` <span class="count num">${left.filter(y=>(y.c.area||"من غير منطقة")===a).length}</span>`}</h3>`:"";area=a;
+        return head+`<div class="card rtc ${x.done?"done":""}"><div class="hd"><span class="main"><b>${esc(x.c.name)}</b>${x.done?` <span class="pill ok">✓ زرته</span>`:""}<br>
+          <span class="s">${x.why.map(esc).join(" · ")||"—"}</span></span></div>
+          <div class="btns">${x.done?"":`<button class="btn primary sm" data-rv="${x.c.id}">✓ زرته</button>`}<button class="btn ghost sm" data-ro="${x.c.id}">طلب</button><button class="btn ghost sm" data-rc="${x.c.id}">تحصيل</button>
+            ${x.c.loc||x.c.area?`<a class="btn ghost sm" href="${esc(mapsUrl(x.c))}" target="_blank" rel="noopener">📍 وديني</a>`:""}</div></div>`}).join("")};
+  sh.addEventListener("click",e=>{const v=e.target.closest("[data-rv]"),o=e.target.closest("[data-ro]"),c=e.target.closest("[data-rc]");
+    if(v){markVisit(v.dataset.rv);draw();render()}
+    if(o){const id=o.dataset.ro;closeSheet();markVisit(id);orderEditor({customerId:id})}
+    if(c){const id=c.dataset.rc;closeSheet();markVisit(id);collectSheet(id)}});
+  sh.querySelector("#rtsum").onclick=()=>shareText(daySummary());draw()}
+// the end of the day in one message: who was visited, today's orders and collections
+function daySummary(){const t=sod(Date.now()),vis=S.customers.filter(c=>c.visited>=t),ords=S.orders.filter(o=>o.status!=="draft"&&ordAt(o)>=t),pays=S.payments.filter(p=>p.date>=t);
+  const n=v=>Math.round(v).toLocaleString("en-US");
+  return [`ملخص يوم ${fmtDay(Date.now())}`,"",`زرت ${vis.length} عميل${vis.length?`: ${vis.map(c=>c.name).join("، ")}`:""}`,
+    `طلبات اتبعتت: ${ords.length}${ords.length?` · ${n(ords.reduce((a,o)=>a+(total(o)||0),0))} ج`:""}`,
+    `تحصيل: ${pays.length?`${n(pays.reduce((a,p)=>a+p.amount,0))} ج من ${pays.length} عميل`:"مفيش"}`,
+    S.settings.rep?`\nمن: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
+/* ---------- تقرير الشهر: orders, collections, best customers and products, who stopped ordering (for the sales manager) ---------- */
+function monthData(y,m){const a=new Date(y,m,1).getTime(),b=new Date(y,m+1,1).getTime(),pa=new Date(y,m-1,1).getTime();
+  const sent=o=>o.status!=="draft",inR=(t,x,z)=>t>=x&&t<z,net=o=>total(o)||0;
+  const ords=S.orders.filter(o=>sent(o)&&inR(ordAt(o),a,b)),prev=S.orders.filter(o=>sent(o)&&inR(ordAt(o),pa,a));
+  const pays=S.payments.filter(p=>inR(p.date,a,b)),prevPays=S.payments.filter(p=>inR(p.date,pa,a)),hand=S.handovers.filter(h=>inR(h.date,a,b));
+  const byC={};ords.forEach(o=>{const k=o.customerId;byC[k]=byC[k]||{c:cust(k),n:0,sum:0};byC[k].n++;byC[k].sum+=net(o)});
+  const byP={};ords.forEach(o=>o.items.forEach(i=>{const k=i.pid||("x:"+itemName(i));byP[k]=byP[k]||{name:itemName(i),pcs:0,sum:0,orders:new Set()};byP[k].pcs+=pieces(i)||i.qty;byP[k].sum+=lineTotal(i);byP[k].orders.add(o.id)}));
+  // stopped: ordered in the two months before, nothing this month
+  const before=new Set(S.orders.filter(o=>sent(o)&&inR(ordAt(o),a-60*DAY,a)).map(o=>o.customerId)),now=new Set(ords.map(o=>o.customerId));
+  const sum=(l,f)=>l.reduce((x,o)=>x+f(o),0);
+  return {y,m,title:`${MON[m]} ${y}`,partial:Date.now()<b,orders:ords.length,net:sum(ords,net),prevNet:sum(prev,net),prevOrders:prev.length,
+    disc:sum(ords,o=>orderMoney(o).disc),pays:sum(pays,p=>p.amount),payN:pays.length,prevPays:sum(prevPays,p=>p.amount),hand:sum(hand,h=>h.amount),
+    custN:now.size,topC:Object.values(byC).sort((x,z)=>z.sum-x.sum||z.n-x.n).slice(0,5),
+    topP:Object.values(byP).sort((x,z)=>z.sum-x.sum||z.pcs-x.pcs).slice(0,5).map(p=>({...p,orders:p.orders.size})),
+    stopped:[...before].filter(id=>!now.has(id)).map(cust).filter(c=>c&&c.name).slice(0,8),owed:sum(S.customers,c=>Math.max(0,balance(c.id)))}}
+const pct=(a,b)=>b?Math.round((a-b)/b*100):null;
+const pctTxt=(a,b)=>{const p=pct(a,b);return p==null?"":p>=0?`↑ ${p}%`:`↓ ${-p}%`};
+function reportText(R){const n=v=>Math.round(v).toLocaleString("en-US");
+  return [`تقرير شهر ${R.title}${R.partial?" (لحد النهارده)":""}`,S.settings.rep?`المندوب: ${S.settings.rep}`:null,"",
+    `الطلبات: ${R.orders} طلب · ${n(R.net)} ج${R.prevNet?` (${pctTxt(R.net,R.prevNet)} عن الشهر اللي قبله)`:""}`,`عملاء طلبوا: ${R.custN}`,
+    `التحصيل: ${n(R.pays)} ج من ${R.payN} دفعة${R.prevPays?` (${pctTxt(R.pays,R.prevPays)})`:""}`,`اتسلّم للشركة: ${n(R.hand)} ج`,`برة عند العملاء دلوقتي: ${n(R.owed)} ج`,
+    ...(R.topC.length?["","أكتر العملاء:",...R.topC.map((x,i)=>`${i+1}. ${x.c.name}: ${n(x.sum)} ج (${x.n} طلب)`)]:[]),
+    ...(R.topP.length?["","أكتر المنتجات:",...R.topP.map((x,i)=>`${i+1}. ${x.name}: ${n(x.pcs)} قطعة${x.sum?` · ${n(x.sum)} ج`:""}`)]:[]),
+    ...(R.stopped.length?["","ما طلبوش الشهر ده (كانوا بيطلبوا):",...R.stopped.map(c=>`• ${c.name}${c.area?` (${c.area})`:""}`)]:[])].filter(x=>x!==null).join("\n")}
+async function reportImage(R){const F="Cairo,system-ui,Tahoma,sans-serif";try{await Promise.all([document.fonts.load(`800 40px Cairo`),document.fonts.load(`600 24px Cairo`)])}catch(e){}
+  const W=1080,P=44,n=v=>Math.round(v).toLocaleString("en-US"),LH=56,secH=k=>k?70+k*LH+10:0;
+  const H=200+2*170+30+secH(R.topC.length)+secH(R.topP.length)+secH(R.stopped.length)+90;
+  const cv=document.createElement("canvas"),ctx=cv.getContext("2d");cv.width=W;cv.height=H;ctx.direction="rtl";ctx.textBaseline="middle";
+  const Rr=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
+  ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);Rr(0,0,W,180,0,"#282825");await drawSymbol(ctx,P,100,52);
+  ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 46px ${F}`;ctx.fillText(`تقرير شهر ${R.title}`,W-P,66);
+  ctx.font=`600 26px ${F}`;ctx.fillStyle="#D9D2C5";ctx.fillText([S.settings.rep&&`المندوب: ${S.settings.rep}`,R.partial&&"لحد النهارده"].filter(Boolean).join(" · ")||"SalesGo",W-P,126);
+  // four boxes: orders, collections, handed over, customers who ordered
+  const box=(x,y,label,val,sub,c)=>{Rr(x,y,(W-2*P-20)/2,150,20,"#FFFFFF");ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`700 24px ${F}`;ctx.fillText(label,x+(W-2*P-20)/2-24,y+34);
+    ctx.fillStyle=c||"#282825";ctx.font=`800 42px ${F}`;ctx.fillText(val,x+(W-2*P-20)/2-24,y+84);if(sub){ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText(sub,x+(W-2*P-20)/2-24,y+124)}};
+  const bw=(W-2*P-20)/2;let y=200;
+  box(W-P-bw,y,"الطلبات",`${n(R.net)} ج`,`${R.orders} طلب${R.prevNet?` · ${pctTxt(R.net,R.prevNet)}`:""}`,"#BD572F");box(P,y,"التحصيل",`${n(R.pays)} ج`,`${R.payN} دفعة${R.prevPays?` · ${pctTxt(R.pays,R.prevPays)}`:""}`,"#236444");y+=170;
+  box(W-P-bw,y,"عملاء طلبوا",String(R.custN),"",null);box(P,y,"اتسلّم للشركة",`${n(R.hand)} ج`,`برة عند العملاء: ${n(R.owed)} ج`,null);y+=180;
+  const sec=(title,rows)=>{if(!rows.length)return;ctx.textAlign="right";ctx.fillStyle="#BD572F";ctx.font=`800 30px ${F}`;ctx.fillText(title,W-P,y+30);y+=70;
+    rows.forEach(([a,b],i)=>{Rr(P,y,W-2*P,LH-6,14,i%2?"#FFFDF9":"#FFFFFF");ctx.textAlign="right";ctx.fillStyle="#282825";let f=27;do{ctx.font=`700 ${f}px ${F}`}while(ctx.measureText(a).width>W-2*P-300&&--f>18);
+      ctx.fillText(a,W-P-20,y+(LH-6)/2);if(b){ctx.textAlign="left";ctx.fillStyle="#6F6A60";ctx.font=`700 24px ${F}`;ctx.fillText(b,P+20,y+(LH-6)/2)}y+=LH});y+=10};
+  sec("أكتر العملاء",R.topC.map((x,i)=>[`${i+1}. ${x.c.name}`,`${n(x.sum)} ج · ${x.n} طلب`]));
+  sec("أكتر المنتجات",R.topP.map((x,i)=>[`${i+1}. ${x.name}`,`${n(x.pcs)} قطعة`]));
+  sec("ما طلبوش الشهر ده",R.stopped.map(c=>[c.name,c.area||""]));
+  ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText("SalesGo",W-P,H-40);ctx.textAlign="left";ctx.fillText("by MESTK",P,H-40);
+  return new Promise(r=>cv.toBlob(r,"image/jpeg",0.92))}
+function reportSheet(){const d=new Date();let ym=[d.getFullYear(),d.getMonth()],file=null,txt="";
+  const prevYm=[new Date(d.getFullYear(),d.getMonth()-1,1).getFullYear(),new Date(d.getFullYear(),d.getMonth()-1,1).getMonth()];
+  const sh=sheet("تقرير الشهر",`<div class="chips"><button class="chip" data-rm="0">${MON[d.getMonth()]} (الشهر ده)</button><button class="chip" data-rm="1">${MON[prevYm[1]]} (اللي فات)</button></div>
+    <div class="oimg" id="rpimg"><span class="hint">بجهز التقرير…</span></div>
+    <details><summary class="link" style="cursor:pointer">شوف الرسالة</summary><div class="msg" id="rptx" style="margin-top:8px"></div></details>`,
+    `<div class="btns"><button class="btn wa" id="rpimgb" disabled>ابعت الصورة</button><button class="btn ghost" id="rptxb">ابعت رسالة</button></div>`,{full:true});
+  const draw=()=>{const R=monthData(ym[0],ym[1]);txt=reportText(R);sh.querySelector("#rptx").textContent=txt;file=null;
+    sh.querySelectorAll("[data-rm]").forEach(b=>b.setAttribute("aria-pressed",(b.dataset.rm==="1")===(ym[1]===prevYm[1]&&ym[0]===prevYm[0])));
+    const ib=sh.querySelector("#rpimgb");ib.disabled=true;sh.querySelector("#rpimg").innerHTML=`<span class="hint">بجهز التقرير…</span>`;const my=ym.join();
+    reportImage(R).then(blob=>{if(!blob||!sh.isConnected||my!==ym.join())return;file=new File([blob],`تقرير-${R.title}.jpg`,{type:"image/jpeg"});
+      sh.querySelector("#rpimg").innerHTML=`<img src="${URL.createObjectURL(blob)}" alt="تقرير الشهر">`;ib.disabled=false})};
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(b){ym=b.dataset.rm==="1"?prevYm:[d.getFullYear(),d.getMonth()];draw()}});
+  sh.querySelector("#rpimgb").onclick=()=>{if(file)shareFile(file)};sh.querySelector("#rptxb").onclick=()=>shareText(txt);draw()}
+const GUIDE=[["🧾","اكتب الطلب وابعته","«+ جديد» ثم «طلب جديد»: اختار العميل، واكتب الطلب زي النوتة أو اختار من المنتجات، وابعته لزميلك صورة أو رسالة. لو نسيت تبعته، البرنامج هيفكّرك."],
+  ["💵","التحصيل في ثانية","«سجّل تحصيل» بتفتح النوتة: اسم العميل والمبلغ في كل سطر. الفلوس اللي معاك وحساب كل عميل بيتحسبوا لوحدهم، وتبعت التحصيل للجروب بدوسة."],
+  ["🔒","بياناتك في أمان","من الإعدادات ⚙️ اعمل حسابك: بياناتك تتحفظ على السيرفر وترجع لو الموبايل ضاع. وشغّل الإشعارات علشان يفكّرك بالمهم في ميعاده."]];
+function guide(force){try{if(!force&&localStorage.getItem("mandoub.guide"))return}catch(e){}let i=0;
+  const el=document.createElement("div");el.className="guide";el.setAttribute("role","dialog");el.setAttribute("aria-label","شرح البرنامج");document.body.appendChild(el);
+  const done=()=>{try{localStorage.setItem("mandoub.guide","1")}catch(e){}el.remove()};
+  const draw=()=>{const [ic,t,b]=GUIDE[i];el.innerHTML=`<div class="gcard"><div class="gic">${ic}</div><h2>${t}</h2><p>${b}</p>
+    <div class="gdots">${GUIDE.map((_,k)=>`<i class="${k===i?"on":""}"></i>`).join("")}</div>
+    <button class="btn primary block" id="gnext">${i<GUIDE.length-1?"التالي":"يلا نبدأ"}</button>${i<GUIDE.length-1?`<button class="link" id="gskip">تخطّي</button>`:""}</div>`;
+    el.querySelector("#gnext").onclick=()=>{if(i<GUIDE.length-1){i++;draw()}else done()};const sk=el.querySelector("#gskip");if(sk)sk.onclick=done};draw()}
 function bindMoves(v){v.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{const [k,id]=b.dataset.mv.split(":");
   if(k==="pay")collectSheet(null,id);else if(k==="hand")handoverSheet(id);else if(k==="adj")adjustSheet(null,id);else orderSheet(id)})}
 function reqRow(r){return `<button class="row alert" data-r="${r.id}"><span class="dot info"></span><span class="main"><span class="t">${esc(cust(r.customerId).name)}</span><br><span class="s">${esc(r.text)} · ${esc(when(r.created))}</span></span></button>`}
@@ -1192,6 +1319,7 @@ function vMoney(v){
   <div class="hero"><div><div class="lbl">معاك دلوقتي</div><div class="big">${money(cashInHand())}<span class="cur">ج</span></div></div>
     <div><div class="lbl">برة عند العملاء</div><div class="big">${money(owedTotal)}<span class="cur">ج</span></div></div>
     <div class="full"><button class="btn onhero sm" id="mCol">تحصيل</button><button class="btn onhero sm" id="mHand">سلّمت للشركة</button></div></div>
+  <button class="acard route" id="mRep"><span class="main"><span class="t">📊 تقرير الشهر</span><span class="s">الطلبات والتحصيل وأكتر العملاء والمنتجات · تبعته لمديرك</span></span>${icon("chev","go")}</button>
   ${unsentSection()}
   ${dayColSection()}
   <section class="sec"><h2>الفلوس اللي برة <span class="count num">${owed.length}</span></h2>
@@ -1199,7 +1327,7 @@ function vMoney(v){
   <section class="sec"><h2>آخر الحركات</h2>${moves.length?`<div class="list ledger">${moves.map(m=>`<button class="row" data-mv="${m.id}"><span class="main"><span class="t">${esc(m.s)}</span><br><span class="s">${esc(dayLabel(m.t))}</span></span><span class="amt ${m.k==="in"?"minus":"plus"}">${smoney(m.k==="in"?"+":"−",m.a)}</span></button>`).join("")}</div>`:`<div class="empty">لسه مفيش حركات</div>`}
   <p class="hint">+ فلوس دخلت معاك من عميل، − فلوس سلمتها للشركة. دوس على أي حركة علشان تعدل المبلغ أو اليوم أو تمسحها.</p></section>`;
   bindMoves(v);bindDayCol(v);bindUnsent(v);
-  $("#mCol").onclick=()=>collectSheet();$("#mHand").onclick=()=>handoverSheet();
+  $("#mCol").onclick=()=>collectSheet();$("#mRep").onclick=()=>reportSheet();$("#mHand").onclick=()=>handoverSheet();
   v.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>collectSheet(b.dataset.col));
 }
 
@@ -1356,6 +1484,71 @@ const itemTags=i=>[i.color&&`اللون: ${i.color}`,i.light&&`الإضاءة: $
 function findProducts(co,cat,q){q=(q||"").trim();// co "" = all companies
   if(q){const ws=q.split(/\s+/);return CAT.products.filter(p=>ws.every(w=>has(p.name+" "+(p.code||"")+" "+coName(p.co),w)))}
   return CAT.products.filter(p=>(!co||p.co===co)&&(cat==="الكل"||p.cat===cat))}
+function textOrderSheet(onAdd){const pick={};// pick[line] = product id, or "free"
+  const sh=sheet("اكتب الطلب",`<label class="f">كل صنف في سطر: العدد والاسم واللون
+      <div class="inrow"><textarea class="inp note" id="otx" rows="5" placeholder="20 سبوت عيون 12 وات ابيض&#10;5 كرتونة كشاف ايفورا 100 وات&#10;3 تراك عيون متحرك 12 وات اسود" autocomplete="off"></textarea>${micHTML("otx")}</div></label>
+    ${voiceHint()}<p class="hint">ممكن تكتب «كرتونة» بعد العدد، والوات أو السم علشان البرنامج يلاقي المنتج الصح. اللي مش في الليستة هيتضاف كصنف مكتوب.</p><div id="opv"></div>`,
+    `<button class="btn primary block" id="oadd" disabled>ضيف للطلب</button>`,{stack:true});
+  const ta=sh.querySelector("#otx");
+  // pick[raw]: a product id, "free" (keep it as written), "" (ask again); nothing = the best match when it's sure
+  const read=()=>splitOrderText(ta.value).map(raw=>{const x=parseOrderLine(raw),m=matchProducts(x,3),pk=pick[raw];let pid=null,ask=false;
+    if(pk==="free");else if(pk)pid=pk;else if(pk==="")ask=m.length>0;else if(m.sure)pid=m[0].p.id;else ask=m.length>0;
+    return {...x,m,pid,ask,name:x.raw.replace(/^[\d٠-٩]+\s*(كرتون[هة]|ك|قطع[هة]?)?\s*/,"")||x.raw}});
+  const draw=()=>{const ls=read(),ok=ls.filter(x=>!x.ask);
+    sh.querySelector("#oadd").disabled=!ls.length||ok.length<ls.length;
+    sh.querySelector("#oadd").textContent=!ls.length?"ضيف للطلب":ok.length<ls.length?`اختار في السطور اللي عليها «؟» (${ls.length-ok.length})`:`ضيف ${ls.length===1?"صنف":`${ls.length} أصناف`} للطلب`;
+    sh.querySelector("#opv").innerHTML=ls.length?`<div class="list ledger">${ls.map(x=>{const p=x.pid&&prod(x.pid);
+      return `<div class="row nrow"><span class="main"><span class="t">${p?`${esc(p.name)} <span class="pill ok">✓</span>`:x.ask?`${esc(x.raw)} <span class="pill warn">؟</span>`:`${esc(x.name)} <span class="pill muted">مكتوب</span>`}</span>
+        <span class="s">${[p&&coName(p.co),x.color&&`اللون: ${x.color}`,x.light&&`الإضاءة: ${x.light}`].filter(Boolean).map(esc).join(" · ")}</span>
+        ${x.ask?`<span class="nask">تقصد أنهي؟ ${x.m.map(y=>`<button type="button" class="chip" data-op="${esc(x.raw)}|${y.p.id}">${esc(y.p.name)} · ${esc(coName(y.p.co))}</button>`).join("")}<button type="button" class="chip" data-op="${esc(x.raw)}|free">مش في الليستة</button></span>`
+          :p||x.m.length?`<button type="button" class="link sm" data-op="${esc(x.raw)}|">غيّر</button>`:""}</span>
+        <span class="amt"><span class="num">${x.qty}</span> ${x.unit==="ك"?"كرتونة":"قطعة"}</span></div>`}).join("")}</div>`
+      :`<div class="empty">اللي هتكتبه هيظهر هنا صنف صنف، علشان تتأكد قبل ما تضيفه</div>`};
+  ta.addEventListener("input",draw);
+  sh.addEventListener("click",e=>{const b=e.target.closest("[data-op]");if(!b)return;const i=b.dataset.op.lastIndexOf("|");
+    pick[b.dataset.op.slice(0,i)]=b.dataset.op.slice(i+1);draw()}); // «غيّر» sends "" = show the choices again
+  sh.querySelector("#oadd").onclick=()=>{const ls=read();if(!ls.length||ls.some(x=>x.ask))return;
+    onAdd(ls.map(x=>({pid:x.pid,name:x.name,qty:x.qty,unit:x.unit,color:x.color,light:x.light})));closeSheet()};
+  draw();setTimeout(()=>ta.focus(),50)}
+/* ---------- writing an order as text (like النوتة): «20 لمبة 12 وات ابيض», «5 كرتونة بلاكات ورم», «سبوت عيون 6 وات × 10» ----------
+   splitOrderText cuts lines (new line, «،», or «و 5 …» from the voice); parseOrderLine finds the count (+ «كرتونة» → ك),
+   the sizes (12 وات, 10 سم) that must match the product, colour and light words; matchProducts scores the catalog. */
+const ORD_STOP=new Set(["و","من","في","عدد","كمية","حبة","حبه","لون","اضاءه","إضاءة","اضاءة","عايز","عاوز","محتاج","ابعت","طلب"].map(w=>norm(w)));
+function splitOrderText(t){return String(t||"").split(/\n|،|؛|\s+و\s*(?=[\d٠-٩])/).map(x=>x.trim()).filter(Boolean)}
+function parseOrderLine(raw){
+  // product codes like «EV-400» are kept whole before the dashes go
+  const codes=[];raw=String(raw).replace(/([A-Za-z]{1,4})\s*-\s*(\d{2,4})/g,(m,a,b)=>{codes.push((a+"-"+b).toUpperCase());return " "});
+  let l=norm(raw).replace(/[×x*]/gi," ").replace(/[-–—:,.()]/g," ").replace(/(\d)\s*(وات|واط|w)(?=\s|$)/gi,"$1 وات").replace(/(\d)\s*(سم|cm)(?=\s|$)/gi,"$1 سم").replace(/\s+/g," ").trim();
+  const t=l.split(" "),U_SPEC={"وات":"وات","واط":"وات","w":"وات","سم":"سم","cm":"سم","متر":"متر","م":"متر","مم":"مم"},U_CTN=new Set(["كرتونه","كرتونة","كراتين","ك","كرتونتين"]),U_PC=new Set(["قطعه","قطعة","قطع","ق"]);
+  let qty=0,unit="ق";const specs=[],words=[];
+  for(let i=0;i<t.length;i++){const w=t[i],nx=(t[i+1]||"").toLowerCase();
+    if(/^\d+(\.\d+)?$/.test(w)){
+      if(U_SPEC[nx]){specs.push(w+U_SPEC[nx]);i++;continue}
+      if(U_CTN.has(nx)){if(!qty){qty=+w;unit="ك"}i++;continue}
+      if(U_PC.has(nx)){if(!qty)qty=+w;i++;continue}
+      if(!qty){qty=+w;continue}
+      words.push(w);continue}
+    if(w==="كرتونتين"&&!qty){qty=2;unit="ك";continue}
+    if(U_CTN.has(w)&&!qty){unit="ك";continue}
+    if(U_PC.has(w))continue;
+    if(!ORD_STOP.has(w))words.push(w)}
+  // colour and light words (the rep says «ورم» for warm light)
+  const j=" "+words.join(" ")+" ";let color="",light="";
+  if(/ ورم | وارم | دافي /.test(j))light="ورم";
+  if(/ ابيض في اسود /.test(j))color="ابيض في اسود";else for(const c of ["دهبي","اسود","ابيض"])if(j.includes(" "+norm(c)+" ")){color=c;break}
+  if(color==="ابيض"&&/ اضاءه ابيض /.test(" "+norm(raw)+" ")){color="";light="ابيض"}
+  const nameWords=words.filter(w=>![...BODY,...LIGHT,"وارم","دافي","في"].map(x=>norm(x)).includes(w));
+  return {raw:String(raw).trim(),qty:qty||1,unit,specs,words:nameWords,codes,color,light,noQty:!qty}}
+const prodKey=p=>{const n=norm(p.name+" "+(p.code||"")).replace(/(\d)\s*(وات|واط|w)/gi,"$1وات").replace(/(\d)\s*(سم|cm)/gi,"$1سم").replace(/[×x]/g," ");return {n,specs:(n.match(/\d+(\.\d+)?(وات|سم|متر|مم)/g)||[])}};
+function matchProducts(x,limit){const out=[];
+  for(const p of CAT.products){const k=prodKey(p);let sc=0,hit=0;
+    for(const s of x.specs){if(k.specs.includes(s)){sc+=4;hit++}else sc-=5}
+    for(const w of x.words){if(w.length<2)continue;if(k.n.includes(w)){sc+=w.length>=4?3:2;hit++}else if(w.length>=4&&k.n.includes(w.slice(0,-1))){sc+=1;hit++}}
+    if(p.code&&(x.codes||[]).includes(String(p.code).toUpperCase())){sc+=12;hit++}
+    if(hit&&sc>0)out.push({p,sc})}
+  out.sort((a,b)=>b.sc-a.sc||a.p.name.length-b.p.name.length);const top=out.slice(0,limit||4);
+  // sure = clearly ahead of the next one, and more than a size matching by chance
+  top.sure=!!(top[0]&&top[0].sc>=6&&(!top[1]||top[0].sc-top[1].sc>=3));return top}
 const catsOf=co=>["الكل",...new Set(CAT.products.filter(p=>!co||p.co===co).map(p=>p.cat))];
 function coSeg(id,extra){return `<div class="seg" id="${id}">${CAT.companies.map(c=>`<button data-co="${c.id}" aria-pressed="${c.id===filt.co}">${esc(c.name)}</button>`).join("")}${extra||""}</div>`}
 const searchBox=(id,ph,val)=>`<div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="${id}" placeholder="${ph}" value="${esc(val||"")}" autocomplete="off" enterkeyhint="search"></div>`;
@@ -1429,6 +1622,7 @@ function orderEditor(init){
       <div id="exl"></div></details>
     <label class="f oe-late">ملاحظة<div class="inrow"><textarea class="inp" id="on" placeholder="ميعاد التسليم، أي حاجة تانية…">${esc(editing?editing.note:init.note||"")}</textarea>${micHTML("on")}</div></label></div>
     <div class="oe-main">
+    <button type="button" class="btn ghost block" id="otxt" style="margin-bottom:10px">✍️ اكتب الطلب أو قوله (زي النوتة)</button>
     ${searchBox("pq","دوّر على منتج أو كود")}
     <div class="chips" id="pco"><button class="chip" data-co="">الكل</button>${CAT.companies.map(c=>`<button class="chip" data-co="${c.id}">${esc(c.name)}</button>`).join("")}<button class="chip" data-picked aria-pressed="false">اخترت <span class="num" id="pcount">0</span></button></div>
     <div class="chips" id="pcats"></div>
@@ -1495,6 +1689,12 @@ function orderEditor(init){
   const drop=ref=>{const [id,k]=ref.split(":"),x=sel[id];if(x.ls.length>1)x.ls.splice(+k||0,1);if(picked&&!qtyOf(id))drawList();else redraw(id)};
   if(usual().length)cat=USUAL;
   drawList();
+  // the order written or said as text: each line becomes a product line (or a free item when it isn't in the list)
+  $("#otxt").onclick=()=>textOrderSheet(adds=>{adds.forEach(a=>{
+      if(!a.pid){extras.push({name:a.name,qty:a.qty,unit:"ق",price:0});return}
+      const x=sel[a.pid]=sel[a.pid]||{per:S.carton[a.pid]||0,ls:[]},l=newL(a.qty);l.u=a.unit;l.color=a.color||"";l.light=a.light||"";
+      const empty=x.ls.findIndex(y=>!y.n);if(empty>=0)x.ls[empty]=l;else x.ls.push(l)});
+    picked=true;q="";$("#pq").value="";drawList();toast(`اتضاف ${adds.length===1?"صنف":`${adds.length} أصناف`} للطلب`)});
   // picking a customer jumps to what he usually takes
   $("#oc").addEventListener("change",()=>{if(!picked&&!q&&(cat==="الكل"||cat===USUAL)){cat=usual().length?USUAL:"الكل"}drawList()});
   sh.addEventListener("click",e=>{const t=e.target;const p=t.closest("[data-p]"),m=t.closest("[data-m]"),u=t.closest("[data-u]"),c=t.closest("[data-cat]"),
@@ -1878,7 +2078,12 @@ function settingsSheet(){const s=S.settings;
     <section class="sec"><h2>تحديث البرنامج</h2>
     <div class="card"><div class="total"><span>النسخة اللي عندك</span><span class="num">v${VERSION}</span></div><div class="hint" id="upHint">دوس علشان تشوف فيه نسخة أحدث ولا لأ. بياناتك مش بتتأثر بالتحديث.</div>
     <button class="btn dark block" id="upBtn">دوّر على تحديث</button></div></section>
+    <button class="btn ghost block" id="sguide" style="margin-top:16px">شرح البرنامج</button>
     <p class="tagline">SalesGo by MESTK</p>`,`<button class="btn primary block" id="ss">احفظ</button>`);
+  sh.querySelector("#sguide").onclick=()=>{closeSheet();guide(true)};
+  // rarely used sections stay folded until tapped
+  sh.querySelectorAll("section.sec").forEach(sec=>{const h=sec.querySelector("h2");if(!h||sec.id==="acc"||/حساب/.test(h.textContent))return;
+    sec.classList.add("fold");h.setAttribute("role","button");h.tabIndex=0;h.onclick=()=>sec.classList.toggle("open")});
   bindAccount(sh);bindZ(sh);const onSy=()=>{const a=sh.querySelector("#ast");if(!sh.isConnected)document.removeEventListener("syncdone",onSy);else if(a)a.textContent=syState()};document.addEventListener("syncdone",onSy);
   sh.querySelector("#ss").onclick=()=>{Object.assign(s,{rep:$("#sr").value.trim(),colleague:$("#sc").value.trim(),phone:$("#sp").value.trim(),remind:+$("#srm").value});save();closeSheet();toast("اتحفظ");render()};
   sh.querySelectorAll("[data-nt]").forEach(c=>c.onchange=()=>{s.notif={...(s.notif||{}),[c.dataset.nt]:c.checked};save()});
@@ -2193,7 +2398,7 @@ addEventListener("online",()=>syncSoon(500));
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")syncSoon(800)});
 setInterval(()=>{if(document.visibilityState==="visible")syncSoon(0)},120000);
 /* ---------- boot ---------- */
-render();loadPhotos();syBadge();syncSoon(1500);
+render();loadPhotos();syBadge();syncSoon(1500);setTimeout(()=>guide(),700);
 setTimeout(()=>{if(pushOk()&&"serviceWorker" in navigator)pushSubscribe().catch(()=>{})},4000);
 {const sp=$("#splash");if(sp){setTimeout(()=>{sp.classList.add("out");setTimeout(()=>sp.remove(),320)},450)}}setTimeout(()=>{try{notifySnapshot()}catch(e){}},1500);
 if("serviceWorker" in navigator&&window.isSecureContext&&window.top===window.self){navigator.serviceWorker.register("sw.js").catch(()=>{})}
