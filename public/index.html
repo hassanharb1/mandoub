@@ -181,6 +181,10 @@ textarea.inp{min-height:96px;resize:vertical;line-height:1.6}
 .mrow{gap:12px}.mrow .tick{flex:none;width:28px;height:28px;border-radius:8px;border:2px solid var(--border);display:grid;place-items:center;font-weight:800;color:var(--onAction)}
 .mrow[aria-pressed="true"] .tick{background:var(--action);border-color:var(--action)}
 .dqa{display:flex;flex-direction:column;gap:10px}
+.cotag{display:inline-block;color:var(--co);background:color-mix(in srgb,var(--co) 14%,transparent);border-radius:6px;padding:0 6px;font-size:12px;font-weight:800;line-height:1.7;vertical-align:1px}
+.codot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-inline-end:6px;vertical-align:1px;flex:none}
+.pcard[style*="--co"],.pc[style*="--co"]{border-inline-start:4px solid var(--co)}
+@media (prefers-color-scheme:dark){.cotag{background:color-mix(in srgb,var(--co) 28%,transparent);color:color-mix(in srgb,var(--co) 60%,#fff)}}
 .nmenu{display:flex;flex-direction:column;gap:10px}.nmenu button{display:flex;gap:14px;align-items:center;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-height:72px}
 .nmenu .ic{font-size:30px;flex:none}.nmenu b{display:block;font-size:18px}.nmenu small{color:var(--muted);font-size:14px}
 .sec.fold>h2{cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}.sec.fold>h2::after{content:"‹";transform:rotate(-90deg);color:var(--muted);font-size:22px;line-height:1}
@@ -459,7 +463,7 @@ setTimeout(flushErr,5000);window.addEventListener("online",flushErr);
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=51; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=52; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -487,6 +491,11 @@ function rebuildCat(u){u=u||{};const ed=u.edit||{};
   CAT={...BASE,companies:ALLCOS.filter(c=>BASE.companies.includes(c)||vis.some(p=>p.co===c.id)),products:vis}}
 rebuildCat();
 const coName=id=>(ALLCOS.find(c=>c.id===id)||{}).name||"";
+/* each company has its colour (catalog.js, or the next one from CO_PAL for the rep's own companies), always with its name beside it */
+const CO_PAL=["#E8590C","#1C7ED6","#2B8A3E","#9C36B5","#C2255C","#0C8599"];
+const coColor=id=>{const i=ALLCOS.findIndex(c=>c.id===id);if(i<0)return "#868E96";return ALLCOS[i].color||CO_PAL[i%CO_PAL.length]};
+const coTag=id=>id&&coName(id)?`<span class="cotag" style="--co:${coColor(id)}">${esc(coName(id))}</span>`:"";
+const coDot=id=>`<i class="codot" style="background:${coColor(id)}"></i>`;
 // catalog first; S.products only holds products from older versions of the app
 function prod(id){return PMAP[id]||(S&&S.products||[]).find(p=>p.id===id)}
 
@@ -869,7 +878,7 @@ function orderCard(o){const s=STATUSES[SIDX[o.status]];const c=cust(o.customerId
   return `<div class="card" data-o="${o.id}"><div class="hd"><span class="main"><b>${esc(c.name)}</b><br><span class="s" style="color:var(--muted);font-size:13px">#<span class="num">${o.no}</span> · ${esc(when(o.created))}</span></span>
   <span class="pill st-${o.status}">${s.t}</span></div>
   <div class="steps">${STATUSES.slice(1).map((x,i)=>`<i class="${SIDX[o.status]>i?"on":""}"></i>`).join("")}</div>
-  <ul class="items">${o.items.slice(0,3).map(i=>`<li><span>${esc(itemName(i))}${itemTags(i)?` · <b>${esc(itemTags(i))}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">${i.qty}</span> ${unitName(i)}</span></li>`).join("")}${o.items.length>3?`<li><span>و ${o.items.length-3} أصناف كمان</span></li>`:""}</ul>
+  <ul class="items">${o.items.slice(0,3).map(i=>`<li><span>${i.pid&&prod(i.pid)?coDot(prod(i.pid).co):""}${esc(itemName(i))}${itemTags(i)?` · <b>${esc(itemTags(i))}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">${i.qty}</span> ${unitName(i)}</span></li>`).join("")}${o.items.length>3?`<li><span>و ${o.items.length-3} أصناف كمان</span></li>`:""}</ul>
   ${s.next?`<div class="btns">${o.status==="draft"?`<button class="btn wa sm" data-send="${o.id}">ابعته واتساب</button>`:`<button class="btn ghost sm" data-adv="${o.id}">${s.next} ✓</button>`}</div>`:""}</div>`}
 // one line per order on Home: customer, number, when, status
 function orderRow(o){const s=STATUSES[SIDX[o.status]];return `<button class="row" data-o="${o.id}"><span class="main"><span class="t">${esc(cust(o.customerId).name)}</span><br>
@@ -1096,19 +1105,27 @@ function dcRange(){const r=filt.dcR;if(!r)return null;let list,title,sub="";
 const byDay=list=>{const m=new Map();list.forEach(p=>{const k=isoDay(p.date);if(!m.has(k))m.set(k,[]);m.get(k).push(p)});return [...m.entries()]};
 // an old payment: money that came in on p.date but settles an older account (p.forDate)
 const oldTag=p=>p.forDate?`قديمة · عن يوم ${fmtDay(p.forDate)}`:"";
-const payNote=p=>[oldTag(p),p.note].filter(Boolean).join(" · ");
+const payNote=p=>[p.co&&coName(p.co),oldTag(p),p.note].filter(Boolean).join(" · ");
+/* which company a collection is for (p.co, optional): a word in النوتة («محمد 500 وايت»), the chips in the collection sheet */
+const coWords=()=>ALLCOS.map(c=>({id:c.id,ws:norm(c.name).split(/\s+/).filter(w=>w.length>1)})).concat([{id:"ev",ws:["evora"]},{id:"wl",ws:["white","whitelight"]}]);
+function takeCo(text){const ws=String(text||"").split(/\s+/).filter(Boolean);let co="";
+  const keep=ws.filter(w=>{const n=norm(w).toLowerCase().replace(/^ال/,"");const hit=coWords().find(c=>c.ws.some(x=>x===n||x.replace(/^ال/,"")===n));if(hit){co=co||hit.id;return false}return true});
+  return {co:ALLCOS.some(c=>c.id===co)?co:"",rest:keep.join(" ")}}
+// «إيفورا: 3,000 ج · وايت لايت: 1,500 ج» when the collections are marked with companies
+function coSplit(list){if(!list.some(p=>p.co))return "";const m=new Map();list.forEach(p=>{const k=p.co||"";m.set(k,(m.get(k)||0)+p.amount)});
+  return [...m.entries()].sort((a,b)=>(a[0]==="")-(b[0]==="")).map(([k,v])=>`${k?coName(k):"من غير شركة"}: ${Math.round(v).toLocaleString("en-US")} ج`).join(" · ")}
 /* «لسه ما اتبعتش»: every collection not yet sent to the group, as one running total (each row keeps its day).
    Sending it (picture or message) marks them sent: p.sent = time; S.lastSent keeps the last batch so it can be undone. */
 const unsentPays=()=>S.payments.filter(p=>!p.sent&&(p.at||p.date)>=(S.unsentFrom||0)).sort((a,b)=>a.date-b.date);
 function markSent(list){if(!list||!list.length)return;const t=Date.now();list.forEach(p=>{p.sent=t});S.lastSent={t,ids:list.map(p=>p.id)};save()}
 function unsentText(list){const ln=p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج · ${fmtDay(p.date)}${p.forDate?` (عن يوم ${fmtDay(p.forDate)})`:""}${p.note?` (${p.note})`:""}`;
-  return [`تحصيلات ${unsentSpan(list)}`,"",...list.map(ln),"",`المجموع: ${list.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US")} ج · ${list.length} تحصيل`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
+  return [`تحصيلات ${unsentSpan(list)}`,"",...list.map(ln),"",`المجموع: ${list.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US")} ج · ${list.length} تحصيل`,coSplit(list)||null,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
 const unsentSpan=list=>{const a=fmtDay(list[0].date),b=fmtDay(list[list.length-1].date);return a===b?`يوم ${a}`:`من ${a} لحد ${b}`};
 function unsentSection(){const list=unsentPays(),sum=list.reduce((a,p)=>a+p.amount,0),L=S.lastSent,lastN=L?L.ids.filter(id=>S.payments.some(p=>p.id===id&&p.sent===L.t)).length:0;
   const undo=lastN&&daysSince(L.t)<1?`<button class="link" id="usUndo">آخر ${lastN===1?"تحصيل":`${lastN} تحصيلات`} ما اتبعتوش فعلاً؟ رجّعهم</button>`:"";
   if(!list.length)return `<section class="sec" id="usSec"><div class="card sentok"><b>✓ كل التحصيلات اتبعتت</b>${L?`<span class="s">آخر مرة ${esc(when(L.t))}</span>`:""}</div>${undo}</section>`;
   return `<section class="sec" id="usSec"><h2>لسه ما اتبعتش <span class="count num">${list.length}</span></h2>
-    <div class="card ustot"><span class="lbl">المجموع</span><div class="big"><span class="num">${Math.round(sum).toLocaleString("en-US")}</span> <small>جنيه</small></div><span class="s">${esc(unsentSpan(list))}</span></div>
+    <div class="card ustot"><span class="lbl">المجموع</span><div class="big"><span class="num">${Math.round(sum).toLocaleString("en-US")}</span> <small>جنيه</small></div><span class="s">${esc(unsentSpan(list))}</span>${coSplit(list)?`<span class="s">${esc(coSplit(list))}</span>`:""}</div>
     <div class="list ledger">${list.map(p=>`<button class="row" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span><br><span class="s">${esc(dayLabel(p.date))}${payNote(p)?` · ${esc(payNote(p))}`:""}</span></span><span class="amt minus">${money(p.amount)}</span></button>`).join("")}</div>
     <div class="btns"><button class="btn wa" id="usImg" disabled>ابعت صورة</button><button class="btn ghost" id="usTxt">ابعت رسالة</button></div>
     <button class="link" id="usMark">بعتهم بطريقة تانية؟ علّمهم إنهم اتبعتوا</button>${undo}</section>`}
@@ -1134,14 +1151,14 @@ function dayColSection(){const list=dayPays(filt.dcDay),sum=list.reduce((a,p)=>a
     return `<section class="sec" id="dcSec"><h2>تحصيلات <span class="count">${esc(R.title)}</span></h2>${chips}
     ${R.list.length?`<div class="list ledger">${R.sub?`<div class="row s" style="font-size:12.5px;padding:6px 14px;background:var(--sunk)">${esc(R.sub)}</div>`:""}
       ${days.map(([iso,ps])=>`<button class="row" data-dcd="${iso}"><span class="main"><span class="t">${esc(fmtDay(fromIso(iso)))}</span><br><span class="s">${ps.length} تحصيل</span></span><span class="amt minus">${money(ps.reduce((a,p)=>a+p.amount,0))}</span></button>`).join("")}
-      <div class="row"><span class="main t">المجموع · ${R.list.length} تحصيل</span><span class="amt">${money(tot)} ج</span></div></div>
+      <div class="row"><span class="main t">المجموع · ${R.list.length} تحصيل${coSplit(R.list)?`<br><span class="s">${esc(coSplit(R.list))}</span>`:""}</span><span class="amt">${money(tot)} ج</span></div></div>
       <p class="hint" style="margin-top:6px">دوس على أي يوم علشان تشوف تحصيلاته</p>
       <div class="btns"><button class="btn wa" id="dcImg">ابعت صورة</button><button class="btn ghost" id="dcTxt">ابعت رسالة</button></div>`
       :`<div class="empty">مفيش تحصيلات ${R.sub?"من ساعة آخر تسليم":"في الأيام دي"}</div>`}</section>`}
   return `<section class="sec" id="dcSec"><h2>تحصيلات يوم <span class="count">${esc(daysSince(d)===0?"النهارده":daysSince(d)===1?"امبارح":fmtDay(d))}</span></h2>
     ${chips}
     ${list.length?`<div class="list ledger">${old.length?sub("دفعات اليوم",neu):""}${rows(neu)}${old.length?sub("دفعات قديمة",old)+rows(old):""}
-      <div class="row"><span class="main t">المجموع · ${list.length} تحصيل</span><span class="amt">${money(sum)} ج</span></div></div>
+      <div class="row"><span class="main t">المجموع · ${list.length} تحصيل${coSplit(list)?`<br><span class="s">${esc(coSplit(list))}</span>`:""}</span><span class="amt">${money(sum)} ج</span></div></div>
       <div class="btns"><button class="btn wa" id="dcImg">ابعت صورة</button><button class="btn ghost" id="dcTxt">ابعت رسالة</button></div>`
       :`<div class="empty">مفيش تحصيلات اليوم ده · دوس «النوتة» واكتبهم زي ما بتكتب في نوتة التليفون</div>`}
     <button class="btn primary block" id="dcAdd">📝 النوتة: سجّل دفعات ${daysSince(d)===0?"النهارده":`يوم ${esc(fmtDay(d))}`}</button></section>`}
@@ -1159,7 +1176,8 @@ function parseNoteLine(raw){
   after=after.replace(/^\s*(جنيهات|جنيه|جنية|ج\.?م|ج)(?=\s|$|[،,.])/,"");
   let name=clean(before),note=clean(after);if(!name&&amount){name=note;note=""}
   const old=/قديم|اللي فات|الي فات/.test(note);if(/^(دفعه |دفعة )?قديم(ه|ة)?$/.test(note))note="";
-  return {raw:raw.trim(),name,amount,note,old,err:!name?"اكتب اسم العميل":!(amount>0)?"اكتب المبلغ":""}}
+  const tc=takeCo(note);note=clean(tc.rest);if(/^(دفعه |دفعة )?قديم(ه|ة)?$/.test(note))note="";
+  return {raw:raw.trim(),name,amount,note,old,co:tc.co,err:!name?"اكتب اسم العميل":!(amount>0)?"اكتب المبلغ":""}}
 function matchCust(name){const n=norm(name).replace(/\s+/g," ").trim();const cn=c=>norm(c.name).replace(/\s+/g," ").trim();
   const ex=S.customers.filter(c=>cn(c)===n);if(ex.length===1)return {c:ex[0],cands:[]};
   if(ex.length)return {cands:ex};
@@ -1210,10 +1228,13 @@ function noteSheet(iso){const dr=S.noteDraft||{};iso=iso||dr.day||isoDay(Date.no
   const sh=sheet("📝 النوتة",`${dateField("nday",fromIso(iso),"اليوم اللي اتقبضت فيه الفلوس")}
     <label class="f">اكتب كل عميل في سطر: الاسم والمبلغ
       <textarea class="inp note" id="nt" rows="6" placeholder="محمد علي 500&#10;الحاج سيد 2 ألف&#10;معرض النور 1500 قديمة" autocomplete="off">${esc(dr.t||"")}</textarea></label>
-    <p class="hint">ممكن تكتب ملحوظة بعد المبلغ (تحويل، باقي الحساب…). ولو الدفعة عن حساب قديم اكتب جنبها «قديمة».</p>
+    <div class="chips" id="nco"><span class="hint" style="align-self:center">الشركة:</span>${ALLCOS.map(c=>`<button type="button" class="chip" data-nco="${c.id}" aria-pressed="${dr.co===c.id}">${coDot(c.id)}${esc(c.name)}</button>`).join("")}<button type="button" class="chip" data-nco="" aria-pressed="${!dr.co}">مش محدد</button></div>
+    <p class="hint">ممكن تكتب ملحوظة بعد المبلغ (تحويل، باقي الحساب…). ولو الدفعة عن حساب قديم اكتب جنبها «قديمة». ولو سطر لشركة تانية اكتب اسمها جنبه («محمد 500 وايت»).</p>
     <div id="npv"></div>`,
     `<div class="total"><span>المجموع</span><span><span class="num" id="nsum">0</span> ج</span></div><button class="btn primary block" id="nsave">احفظ</button>`);
-  bindDate("nday");const ta=sh.querySelector("#nt");
+  bindDate("nday");const ta=sh.querySelector("#nt");let allCo=dr.co||"";
+  sh.querySelector("#nco").addEventListener("click",e=>{const b=e.target.closest("[data-nco]");if(!b)return;allCo=b.dataset.nco;
+    sh.querySelectorAll("[data-nco]").forEach(x=>x.setAttribute("aria-pressed",x===b));if(S.noteDraft){S.noteDraft.co=allCo;save()}draw()});
   const lines=()=>ta.value.split("\n").map(parseNoteLine).filter(x=>x.raw).map(x=>{const k=norm(x.name).replace(/\s+/g," ").trim();
     const m=x.name?matchCust(x.name):{cands:[]};const p=pick[k];
     const c=p&&p!=="new"?S.customers.find(y=>y.id===p):m.c;return {...x,k,c,isNew:p==="new"||(!c&&!m.cands.length),cands:c||p?[]:m.cands}});
@@ -1225,13 +1246,13 @@ function noteSheet(iso){const dr=S.noteDraft||{};iso=iso||dr.day||isoDay(Date.no
     $("#npv").innerHTML=ls.length?`<div class="list ledger">${ls.map(x=>x.err?`<div class="row nerr"><span class="main"><span class="t">${esc(x.raw)}</span><br><span class="s">${x.err}</span></span></div>`
       :`<div class="row nrow"><span class="main"><span class="t">${esc(x.c?x.c.name:x.name)}${x.c?` <span class="pill ok">✓</span>`:x.isNew?` <span class="pill warn">عميل جديد</span>`:""}</span>
         ${x.bal?`<span class="s nbal">عليه <span class="num">${Math.round(x.bal[0]).toLocaleString("en-US")}</span> ← <span class="num ${x.bal[1]<0?"neg":""}">${Math.round(x.bal[1]).toLocaleString("en-US")}</span></span>`:""}
-        ${x.note?`<br><span class="s">${esc(x.note)}</span>`:""}
+        ${x.co||allCo?` ${coTag(x.co||allCo)}`:""}${x.note?`<br><span class="s">${esc(x.note)}</span>`:""}
         ${x.cands.length?`<span class="nask">تقصد مين؟ ${x.cands.map(c=>`<button type="button" class="chip" data-np="${esc(x.k)}|${c.id}">${esc(custLabel(c))}</button>`).join("")}<button type="button" class="chip" data-np="${esc(x.k)}|new">عميل جديد</button></span>`:""}
         ${x.old?`<label class="bfor">دفعة قديمة عن يوم <input class="inp num" type="date" data-nf="${esc(x.raw)}" value="${oldFor[x.raw]||(oldFor[x.raw]=isoDay(fromIso($("#nday").value||iso)-7*DAY))}" max="${isoDay(Date.now())}" style="direction:ltr"></label>`:""}</span>
         <span class="amt minus">${money(x.amount)}</span></div>`).join("")}</div>`
       :`<div class="empty">اللي هتكتبه هيظهر هنا: كل عميل والمبلغ، علشان تتأكد قبل ما تحفظ</div>`};
   // the draft is saved half a second after typing stops, even if the sheet was closed meanwhile
-  const dayEl=sh.querySelector("#nday");let dt;ta.addEventListener("input",()=>{draw();clearTimeout(dt);dt=setTimeout(()=>{if(ta.value.trim())S.noteDraft={t:ta.value,day:dayEl.value};else delete S.noteDraft;save()},500)});
+  const dayEl=sh.querySelector("#nday");let dt;ta.addEventListener("input",()=>{draw();clearTimeout(dt);dt=setTimeout(()=>{if(ta.value.trim())S.noteDraft={t:ta.value,day:dayEl.value,co:allCo};else delete S.noteDraft;save()},500)});
   sh.addEventListener("change",e=>{const f=e.target.closest("[data-nf]");if(f)oldFor[f.dataset.nf]=f.value;
     if(e.target.id==="nday"&&S.noteDraft){S.noteDraft.day=e.target.value;save()}});
   sh.addEventListener("click",e=>{const b=e.target.closest("[data-np]");if(!b)return;const [k,v]=b.dataset.np.split("|");pick[k]=v;draw()});
@@ -1244,12 +1265,12 @@ function noteSheet(iso){const dr=S.noteDraft||{};iso=iso||dr.day||isoDay(Date.no
       return toast(`هيتعمل ${nw.length===1?"عميل جديد":`${nw.length} عملاء جداد`}: ${nw.join("، ")} · لو الاسم غلط صلّحه، ولو تمام دوس احفظ تاني`)}
     const day=$("#nday").value||iso,made={},ids=[];let added=0;
     ls.forEach(x=>{let c=x.c;if(!c){c=made[x.k];if(!c){c=made[x.k]={id:uid(),name:x.name,owner:"",area:"",phone:"",opening:0};S.customers.push(c);added++}}
-      const p={id:uid(),customerId:c.id,amount:x.amount,date:fromIso(day),note:x.note,at:Date.now()};if(x.old)p.forDate=fromIso(oldFor[x.raw]||isoDay(fromIso(day)-7*DAY));
+      const p={id:uid(),customerId:c.id,amount:x.amount,date:fromIso(day),note:x.note,at:Date.now()};if(x.co||allCo)p.co=x.co||allCo;if(x.old)p.forDate=fromIso(oldFor[x.raw]||isoDay(fromIso(day)-7*DAY));
       S.payments.push(p);ids.push(p.id)});
     delete S.noteDraft;filt.dcDay=day;filt.dcR=null;save();render();noteDone(ids,day,added)}}
 // after saving the note: send each collection on its own, or all of them as one picture or message
 function noteDone(ids,iso,added){const list=ids.map(id=>S.payments.find(p=>p.id===id)).filter(Boolean),sum=list.reduce((a,p)=>a+p.amount,0);
-  const sh=sheet("اتسجل ✓",`<div class="card"><span class="hint">${list.length} دفعة${added?` · واتضاف ${added} عميل جديد`:""}</span><div style="font-size:24px;font-weight:800">${money(sum)} ج</div></div>
+  const sh=sheet("اتسجل ✓",`<div class="card"><span class="hint">${list.length} دفعة${added?` · واتضاف ${added} عميل جديد`:""}</span><div style="font-size:24px;font-weight:800">${money(sum)} ج</div>${coSplit(list)?`<span class="hint">${esc(coSplit(list))}</span>`:""}</div>
     <p class="hint">ابعت لكل عميل لوحده، أو ابعتهم كلهم مرة واحدة.</p>
     <div class="list ledger">${list.map(p=>`<div class="row prow"><button class="pmain" data-mv="pay:${p.id}"><span class="main"><span class="t">${esc(cust(p.customerId).name)}</span>${payNote(p)?`<br><span class="s">${esc(payNote(p))}</span>`:""}</span><span class="amt minus">${money(p.amount)}</span></button>
       <span class="psend"><button data-pimg="${p.id}">صورة</button><button data-ptxt="${p.id}">رسالة</button></span></div>`).join("")}</div>`,
@@ -1265,7 +1286,7 @@ async function shareFile(file){const data={files:[file]};
   else{const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();toast("الصورة نزلت، ابعتها من واتساب");return true}}
 function rangeColText(R){const ln=p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج${p.forDate?` (عن يوم ${fmtDay(p.forDate)})`:""}${p.note?` (${p.note})`:""}`,sm=ps=>ps.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US");
   return [`تحصيلات ${R.title}`,...(R.sub?[R.sub]:[]),...byDay(R.list).flatMap(([iso,ps])=>["",`${fmtDay(fromIso(iso))}:`,...ps.map(ln),`مجموع اليوم: ${sm(ps)} ج`]),"",
-    `المجموع: ${sm(R.list)} ج · ${R.list.length} تحصيل`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
+    `المجموع: ${sm(R.list)} ج · ${R.list.length} تحصيل`,coSplit(R.list)||null,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
 const rangeHead=R=>({title:`تحصيلات ${R.title}`,sub:R.sub,groups:byDay(R.list).map(([iso,ps])=>[fmtDay(fromIso(iso)),ps])});
 function dcPickSheet(){const R=filt.dcR&&filt.dcR.k==="range"?filt.dcR:null,a=R?R.a:filt.dcDay,b=R?R.b:filt.dcDay;
   const sh=sheet("اختار الأيام",`${dateField("dpa",fromIso(a),"من يوم")}${dateField("dpb",fromIso(b),"لحد يوم")}
@@ -1276,11 +1297,11 @@ function dcPickSheet(){const R=filt.dcR&&filt.dcR.k==="range"?filt.dcR:null,a=R?
 function dayColText(iso,list){list=list||dayPays(iso);const d=fromIso(iso),neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate);
   const ln=p=>`• ${cust(p.customerId).name}: ${p.amount.toLocaleString("en-US")} ج${p.forDate?` (عن يوم ${fmtDay(p.forDate)})`:""}${p.note?` (${p.note})`:""}`;
   return [`تحصيلات يوم ${fmtDay(d)}`,"",...(old.length&&neu.length?["دفعات اليوم:"]:[]),...neu.map(ln),...(old.length?[...(neu.length?[""]:[]),"دفعات قديمة:",...old.map(ln)]:[]),"",
-    `المجموع: ${list.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US")} ج`,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
+    `المجموع: ${list.reduce((a,p)=>a+p.amount,0).toLocaleString("en-US")} ج`,coSplit(list)||null,S.settings.rep?`من: ${S.settings.rep}`:null].filter(x=>x!==null).join("\n")}
 async function dayColImage(iso,list,head){const F="Cairo,system-ui,Tahoma,sans-serif";try{await document.fonts.load(`800 40px Cairo`)}catch(e){}
   list=list||dayPays(iso);const d=new Date(fromIso(iso)),W=1080,P=44,RH=96,sum=list.reduce((a,p)=>a+p.amount,0);
   const neu=list.filter(p=>!p.forDate),old=list.filter(p=>p.forDate),groups=head?head.groups:old.length?[["دفعات اليوم",neu],["دفعات قديمة",old]].filter(g=>g[1].length):[["",neu]];
-  const cv=document.createElement("canvas"),ctx=cv.getContext("2d");const H=230+list.length*RH+groups.filter(g=>g[0]).length*70+150+80;cv.width=W;cv.height=H;
+  const split=coSplit(list),cv=document.createElement("canvas"),ctx=cv.getContext("2d");const H=230+list.length*RH+groups.filter(g=>g[0]).length*70+150+80+(split?50:0);cv.width=W;cv.height=H;
   ctx.direction="rtl";ctx.textBaseline="middle";const R=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.fillStyle=fill;ctx.fill()};
   ctx.fillStyle="#F5F0E7";ctx.fillRect(0,0,W,H);R(0,0,W,180,0,"#282825");await drawSymbol(ctx,P,100,52);
   ctx.textAlign="right";ctx.fillStyle="#FFFFFF";const T=head?head.title:`تحصيلات يوم ${WD[d.getDay()]}`;let fs=46;do{ctx.font=`800 ${fs}px ${F}`}while(ctx.measureText(T).width>W-2*P-230&&--fs>26);ctx.fillText(T,W-P,66);
@@ -1295,6 +1316,7 @@ async function dayColImage(iso,list,head){const F="Cairo,system-ui,Tahoma,sans-s
       ctx.textAlign="left";ctx.fillStyle="#2F7D4F";ctx.font=`800 34px ${F}`;ctx.fillText(`${p.amount.toLocaleString("en-US")} ج`,P+24,y+43);y+=RH})});
   y+=10;R(P,y,W-2*P,110,22,"#BD572F");ctx.textAlign="right";ctx.fillStyle="#FFFFFF";ctx.font=`800 36px ${F}`;ctx.fillText("المجموع",W-P-28,y+55);
   ctx.textAlign="left";ctx.font=`800 42px ${F}`;ctx.fillText(`${sum.toLocaleString("en-US")} ج`,P+28,y+55);
+  if(split){ctx.textAlign="center";ctx.fillStyle="#282825";ctx.font=`700 26px ${F}`;ctx.fillText(split,W/2,y+140)}
   ctx.textAlign="right";ctx.fillStyle="#6F6A60";ctx.font=`600 22px ${F}`;ctx.fillText("SalesGo",W-P,H-40);ctx.textAlign="left";ctx.fillText("by MESTK",P,H-40);
   return new Promise(r=>cv.toBlob(r,"image/jpeg",0.92))}
 function bindDayCol(v){
@@ -1550,7 +1572,7 @@ function matchProducts(x,limit){const out=[];
   // sure = clearly ahead of the next one, and more than a size matching by chance
   top.sure=!!(top[0]&&top[0].sc>=6&&(!top[1]||top[0].sc-top[1].sc>=3));return top}
 const catsOf=co=>["الكل",...new Set(CAT.products.filter(p=>!co||p.co===co).map(p=>p.cat))];
-function coSeg(id,extra){return `<div class="seg" id="${id}">${CAT.companies.map(c=>`<button data-co="${c.id}" aria-pressed="${c.id===filt.co}">${esc(c.name)}</button>`).join("")}${extra||""}</div>`}
+function coSeg(id,extra){return `<div class="seg" id="${id}">${CAT.companies.map(c=>`<button data-co="${c.id}" aria-pressed="${c.id===filt.co}">${coDot(c.id)}${esc(c.name)}</button>`).join("")}${extra||""}</div>`}
 const searchBox=(id,ph,val)=>`<div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="${id}" placeholder="${ph}" value="${esc(val||"")}" autocomplete="off" enterkeyhint="search"></div>`;
 
 function lightbox(pid,withOrder){const p=prod(pid);if(!p)return;$(".lightbox")?.remove();
@@ -1573,8 +1595,8 @@ function vProducts(v){
     $("#vcats").hidden=!!q;
     $("#vcats").innerHTML=catsOf(filt.co).map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${c===filt.pcat}">${esc(c)}</button>`).join("");
     const list=findProducts(filt.co,filt.pcat,q);
-    const card=p=>`<button class="pcard" data-pz="${p.id}"><div class="im">${imgHTML(p)}</div><div class="b"><span class="t">${esc(p.name)}</span>
-      <span class="s" style="font-size:12.5px;color:var(--muted)">${q?esc(coName(p.co))+" · ":""}${p.code?esc(p.code):esc(p.cat)}</span><span class="pr">${p.price?money(p.price)+" ج":"—"}</span>${p.mine?`<span class="ptag">مضاف منك</span>`:p.edited?`<span class="ptag">معدّل</span>`:""}</div></button>`;
+    const card=p=>`<button class="pcard" data-pz="${p.id}" style="--co:${coColor(p.co)}"><div class="im">${imgHTML(p)}</div><div class="b"><span class="t">${esc(p.name)}</span>
+      <span class="s" style="font-size:12.5px;color:var(--muted)">${coTag(p.co)} ${p.code?esc(p.code):esc(p.cat)}</span><span class="pr">${p.price?money(p.price)+" ج":"—"}</span>${p.mine?`<span class="ptag">مضاف منك</span>`:p.edited?`<span class="ptag">معدّل</span>`:""}</div></button>`;
     $("#vlist").innerHTML=(list.length?`<div class="grid" id="vgrid"></div>`:`<div class="empty">مفيش منتج بالاسم ده</div>`)+(!q&&co&&co.note?`<p class="hint" style="margin-top:10px">${esc(co.name)}: ${esc(co.note)}</p>`:"");
     if(list.length)drawRows($("#vgrid"),list,card)};
   draw();
@@ -1624,7 +1646,7 @@ function orderEditor(init){
     <div class="oe-main">
     <button type="button" class="btn ghost block" id="otxt" style="margin-bottom:10px">✍️ اكتب الطلب أو قوله (زي النوتة)</button>
     ${searchBox("pq","دوّر على منتج أو كود")}
-    <div class="chips" id="pco"><button class="chip" data-co="">الكل</button>${CAT.companies.map(c=>`<button class="chip" data-co="${c.id}">${esc(c.name)}</button>`).join("")}<button class="chip" data-picked aria-pressed="false">اخترت <span class="num" id="pcount">0</span></button></div>
+    <div class="chips" id="pco"><button class="chip" data-co="">الكل</button>${CAT.companies.map(c=>`<button class="chip" data-co="${c.id}">${coDot(c.id)}${esc(c.name)}</button>`).join("")}<button class="chip" data-picked aria-pressed="false">اخترت <span class="num" id="pcount">0</span></button></div>
     <div class="chips" id="pcats"></div>
     <div class="oh"><h3>المنتجات</h3><span class="hint" id="ocount"></span></div>
     <div class="plist" id="plist"></div></div>`,
@@ -1655,11 +1677,11 @@ function orderEditor(init){
   const summary=x=>x.ls.filter(l=>l.n>0).map(l=>`<span class="num">${l.n}</span> ${UN[l.u]}${l.color?` · ${esc(l.color)}`:""}${l.light?` · ${esc(l.light)}`:""}`).join(" + ");
   const row=p=>{const x=sel[p.id],n=qtyOf(p.id),open=n&&openId===p.id;
     const head=`<button class="thumb" data-zoom="${p.id}" aria-label="كبّر الصورة">${imgHTML(p)}</button>
-      <div class="main"><div class="t">${esc(p.name)}${p.code?` <span class="code">${esc(p.code)}</span>`:""}</div><div class="s">${q||picked||!co?esc(coName(p.co))+" · ":""}${p.price?`<span class="num">${fmtM(p.price)}</span> جنيه / قطعة`:"من غير سعر"}</div>
+      <div class="main"><div class="t">${esc(p.name)}${p.code?` <span class="code">${esc(p.code)}</span>`:""}</div><div class="s">${coTag(p.co)} ${p.price?`<span class="num">${fmtM(p.price)}</span> جنيه / قطعة`:"من غير سعر"}</div>
       ${n&&!open?`<div class="osumm">${summary(x)}</div>`:""}</div>`;
-    if(!n)return `<div class="pc" data-row="${p.id}"><div class="pch">${head}<button class="addbtn" data-p="${p.id}">${icon("plus")}ضيف</button></div></div>`;
-    if(!open)return `<div class="pc sel" data-row="${p.id}"><div class="pch">${head}<button class="link" data-open="${p.id}">تعديل</button></div></div>`;
-    return `<div class="pc sel open" data-row="${p.id}"><div class="pch">${head}</div>${x.ls.map((l,k)=>lineHTML(p,k,l)).join("")}
+    if(!n)return `<div class="pc" style="--co:${coColor(p.co)}" data-row="${p.id}"><div class="pch">${head}<button class="addbtn" data-p="${p.id}">${icon("plus")}ضيف</button></div></div>`;
+    if(!open)return `<div class="pc sel" style="--co:${coColor(p.co)}" data-row="${p.id}"><div class="pch">${head}<button class="link" data-open="${p.id}">تعديل</button></div></div>`;
+    return `<div class="pc sel open" style="--co:${coColor(p.co)}" data-row="${p.id}"><div class="pch">${head}</div>${x.ls.map((l,k)=>lineHTML(p,k,l)).join("")}
       ${x.ls.some(l=>l.u==="ك")?`<label class="per ${x.per?"":"need"}">الكرتونة فيها <input class="num" data-per="${p.id}" value="${x.per||""}" inputmode="numeric" placeholder="؟"> قطعة${x.per?"":" · علشان تتحسب في المجموع"}</label>`:""}
       <div class="pcf"><button type="button" class="link" data-more="${p.id}">+ لون تاني</button><button type="button" class="link" data-open="">تمام</button></div></div>`};
   const draft=()=>({items:[...flat().map(l=>({pid:l.pid,qty:l.n,unit:l.u,per:l.u==="ك"?l.per:0,price:prod(l.pid)?.price||0})),...extras],
@@ -1771,7 +1793,7 @@ function orderEditor(init){
 function waNum(p){p=String(p||"").replace(/\D/g,"");if(p.startsWith("00"))p=p.slice(2);if(p.startsWith("0"))p="2"+p;return p}
 // items grouped by company, free-text items last
 function groups(o){const g=[];o.items.forEach(i=>{const p=i.pid&&prod(i.pid);const k=p&&p.co?coName(p.co):"أصناف تانية";
-  let x=g.find(y=>y.k===k);if(!x){x={k,items:[]};g.push(x)}x.items.push(i)});
+  let x=g.find(y=>y.k===k);if(!x){x={k,co:p&&p.co,items:[]};g.push(x)}x.items.push(i)});
   return g.sort((a,b)=>(a.k==="أصناف تانية")-(b.k==="أصناف تانية"))}
 function moneyLines(o){const m=orderMoney(o);if(!m.sub)return[];
   return["",`المجموع: ${fmtM(m.sub)} ج${m.pcs?` (${m.pcs} قطعة)`:""}`,m.disc?`خصم العميل: ${fmtM(m.pct)}% = ${fmtM(m.disc)} ج`:null,`الإجمالي: ${fmtM(m.net)} ج`,
@@ -1813,7 +1835,7 @@ async function orderImage(o,isEdit){
   const terms=[o.disc?`خصم العميل ${o.disc}%`:null,o.pay?`الدفع: ${PAY[o.pay]}`:null].filter(Boolean).join("   ·   ");
   if(terms){R(P,y,W-2*P,72,18,"#F6E2D8");ctx.textAlign="center";ctx.fillStyle="#BD572F";ctx.font=`800 32px ${F}`;ctx.fillText(terms,W/2,y+38);y+=92}
   for(const g of gs){
-    if(gs.length>1){ctx.textAlign="right";ctx.fillStyle="#BD572F";ctx.font=`800 30px ${F}`;ctx.fillText(g.k,W-P,y+26);y+=64}
+    if(gs.length>1){const cc=g.co?coColor(g.co):"#6F6A60";ctx.fillStyle=cc;ctx.fillRect(W-P-8,y+8,8,36);ctx.textAlign="right";ctx.font=`800 30px ${F}`;ctx.fillText(g.k,W-P-20,y+26);y+=64}
     for(const i of g.items){const p=i.pid&&prod(i.pid);
       R(P,y,W-2*P,RH,22,"#FFFFFF");
       const tx=W-P-16-TH,ty=y+(RH-TH)/2;R(tx,ty,TH,TH,16,"#F7F5F1");
@@ -1898,7 +1920,7 @@ function sendSheet(id,isEdit){const o=S.orders.find(x=>x.id===id);const txt=mess
 
 function orderSheet(id){const o=S.orders.find(x=>x.id===id);const c=cust(o.customerId);const s=STATUSES[SIDX[o.status]];
   const sh=sheet(`طلب #${o.no}`,`<div class="card"><div class="hd"><span class="main"><b>${esc(c.name)}</b><br><span style="color:var(--muted);font-size:13px">${esc(c.owner)} · ${esc(when(o.created))}</span></span><span class="pill st-${o.status}">${s.t}</span></div>
-    <ul class="items" style="color:var(--fg)">${o.items.map(i=>`<li><span>${esc(itemName(i))}${itemTags(i)?` · <b>${esc(itemTags(i))}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">${i.qty}</span> ${unitName(i)}</span></li>`).join("")}</ul>
+    <ul class="items" style="color:var(--fg)">${o.items.map(i=>`<li><span>${i.pid&&prod(i.pid)?coDot(prod(i.pid).co):""}${esc(itemName(i))}${itemTags(i)?` · <b>${esc(itemTags(i))}</b>`:""}${i.note?`<br><small>${esc(i.note)}</small>`:""}</span><span style="flex:none"><span class="num">${i.qty}</span> ${unitName(i)}</span></li>`).join("")}</ul>
     ${o.note?`<div class="hint">ملاحظة: ${esc(o.note)}</div>`:""}${(()=>{const m=orderMoney(o);return m.sub?`<div class="total"><span>المجموع</span><span>${money(m.sub)} ج</span></div>${m.disc?`<div class="total"><span>خصم ${fmtM(m.pct)}%</span><span>− ${money(m.disc)} ج</span></div>`:""}<div class="total"><span>الإجمالي</span><span>${money(m.net)} ج</span></div>`:""})()}
     ${o.status==="draft"?`<div class="hint">هيتحسب على العميل أول ما يتبعت</div>`:ordOn(o)?`<div class="hint">✓ محسوب على العميل: ${money(total(o)||0)} ج${total(o)?"":" (من غير مبلغ، عدّل الطلب وكمّل الأسعار)"}</div>`:`<div class="hint">مش محسوب في حساب العميل (اتبعت قبل ما الطلبات تدخل الحساب)</div>`}
     <div class="inrow" style="align-items:center"><span class="hint" style="flex:none">الدفع</span><div class="seg" id="opay2">${[["cash","كاش"],["credit","آجل"],["","بعدين"]].map(([k,t])=>`<button data-pay="${k}" aria-pressed="${(o.pay||"")===k}">${t}</button>`).join("")}</div></div></div>
@@ -1924,6 +1946,7 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
   const sh=sheet(p?"تعديل تحصيل":"تحصيل",`${p?`<div class="card sendone"><span class="hint">ابعت التحصيل ده للزميل أو الجروب</span><div class="btns"><button class="btn wa" id="p1img">ابعت صورة</button><button class="btn ghost" id="p1txt">ابعت رسالة</button></div></div>`:""}
     ${custSelect("pc",cid)}<div id="pbal" class="hint"></div>
     <label class="f">المبلغ<input class="inp num" id="pa" type="number" inputmode="decimal" placeholder="0" value="${p?p.amount:""}" style="text-align:right;direction:rtl"></label>
+    <div class="f"><span>الشركة</span><div class="chips" id="pcoc">${ALLCOS.map(c=>`<button type="button" class="chip" data-pco="${c.id}">${coDot(c.id)}${esc(c.name)}</button>`).join("")}<button type="button" class="chip" data-pco="">مش محدد</button></div></div>
     ${dateField("pd",p?p.date:Date.now())}
     <div class="inrow" style="align-items:center"><button type="button" class="chip" id="pold" aria-pressed="${!!(p&&p.forDate)}" style="flex:none">دفعة قديمة</button>
       <label class="f" id="pforL" ${p&&p.forDate?"":"hidden"} style="flex-direction:row;align-items:center;gap:8px">عن يوم<input class="inp num" id="pfor" type="date" max="${isoDay(Date.now())}" value="${p&&p.forDate?isoDay(p.forDate):""}" style="direction:ltr"></label></div>
@@ -1931,12 +1954,18 @@ function collectSheet(cid,payId){const p=payId?S.payments.find(x=>x.id===payId):
     p?`<div class="btns"><button class="btn primary" id="ps">احفظ التعديل</button><button class="btn ghost" id="pdl" style="flex:0 0 auto">امسح</button></div>`
      :`<div class="btns"><button class="btn primary" id="ps">سجّل التحصيل</button><button class="btn wa" id="psh">سجّل وابعته</button></div>`);
   if(p){sh.querySelector("#p1txt").onclick=()=>shareText(payMessage(p)).then(ok=>ok&&markSent([p]));sh.querySelector("#p1img").onclick=()=>sharePayImage(p).then(ok=>ok&&markSent([p]))}
-  const upd=()=>{const c=$("#pc").value;const b=c?Math.round(balance(c)):0;$("#pbal").textContent=!c?"":b>0?`عليه دلوقتي ${b.toLocaleString("en-US")} ج`:b<0?`ليه عندك ${(-b).toLocaleString("en-US")} ج`:"حسابه خالص"};upd();$("#pc").onchange=upd;bindDate("pd");
+  const upd=()=>{const c=$("#pc").value;const b=c?Math.round(balance(c)):0;$("#pbal").textContent=!c?"":b>0?`عليه دلوقتي ${b.toLocaleString("en-US")} ج`:b<0?`ليه عندك ${(-b).toLocaleString("en-US")} ج`:"حسابه خالص"};upd();bindDate("pd");
+  // the company: this collection's, or the one this customer paid for last time
+  let pco=p?p.co||"":"";const lastCo=cid=>{let l=null;S.payments.forEach(x=>{if(x.customerId===cid&&x.co&&(!l||x.date>=l.date))l=x});return l?l.co:""}; // ties: the one recorded last
+  const showCo=()=>sh.querySelectorAll("[data-pco]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pco===pco));
+  if(!p&&cid)pco=lastCo(cid);showCo();
+  sh.querySelector("#pcoc").addEventListener("click",e=>{const b=e.target.closest("[data-pco]");if(b){pco=b.dataset.pco;showCo()}});
+  $("#pc").onchange=()=>{upd();if(!p){pco=lastCo($("#pc").value);showCo()}};
   sh.querySelector("#pold").onclick=e=>{const on=e.currentTarget.getAttribute("aria-pressed")!=="true";e.currentTarget.setAttribute("aria-pressed",on);$("#pforL").hidden=!on;
     if(on&&!$("#pfor").value)$("#pfor").value=isoDay(fromIso($("#pd").value)-7*DAY)};
   const keep=share=>{const c=$("#pc").value,a=parseFloat($("#pa").value);if(!c)return toast("اختار العميل");if(!(a>0))return toast("اكتب المبلغ");
     const isOld=sh.querySelector("#pold").getAttribute("aria-pressed")==="true";if(isOld&&!$("#pfor").value)return toast("اختار الدفعة القديمة عن أنهي يوم");
-    const d={customerId:c,amount:a,date:fromIso($("#pd").value,p&&p.date),note:$("#pn").value.trim()};
+    const d={customerId:c,amount:a,date:fromIso($("#pd").value,p&&p.date),note:$("#pn").value.trim(),co:pco||undefined};
     let x=p;if(x){if(x.sent&&(x.amount!==d.amount||x.customerId!==d.customerId))delete x.sent;Object.assign(x,d)}else{x={id:uid(),...d,at:Date.now()};S.payments.push(x)}
     if(isOld)x.forDate=fromIso($("#pfor").value,x.forDate);else delete x.forDate;save();closeSheet();
     toast(p?"اتعدل":`اتسجل ${a.toLocaleString("en-US")} ج · بقى معاك ${Math.round(cashInHand()).toLocaleString("en-US")} ج`);render();

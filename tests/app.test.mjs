@@ -261,3 +261,25 @@ test("the one main button opens the four everyday actions; the first-run guide s
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test("companies: each has its colour and name tag; collections carry the company (النوتة word, «الشركة» for all, the sheet) and totals split by company", async () => {
+  const page = await phone(b, srv.url); await realData(page);
+  assert.notEqual(await page.evaluate(() => __T.coColor("ev")), await page.evaluate(() => __T.coColor("wl")));
+  assert.deepEqual(await page.evaluate(() => [__T.parseNoteLine("محمد 500 وايت").co, __T.parseNoteLine("سيد 2 ألف ايفورا قديمة").co, __T.parseNoteLine("علي 300 تحويل").co, __T.parseNoteLine("محمد 500 وايت لايت تحويل").note]), ["wl", "ev", "", "تحويل"]);
+  await click(page, '#nav [data-go="products"]'); await wait(200);
+  assert.ok(await page.evaluate(() => document.querySelectorAll(".pcard .cotag").length > 0), "no company tag on the products");
+  const name = await page.evaluate(() => __T.S.customers[0].name);
+  await page.evaluate(() => __T.noteSheet()); await wait(150);
+  await click(page, '[data-nco="ev"]');
+  await page.fill("#nt", `${name} 500\n${name} 300 وايت`); await wait(200);
+  await click(page, "#nsave"); await wait(300);
+  const cos = await page.evaluate(() => __T.S.payments.slice(-2).map(p => p.co));
+  assert.deepEqual(cos, ["ev", "wl"]);
+  assert.match(await page.evaluate(() => __T.coSplit(__T.S.payments.slice(-2))), /إيفورا: 500 ج · وايت لايت: 300 ج/);
+  await page.evaluate(() => __T.closeSheet());
+  // the single collection sheet remembers the customer's last company
+  await page.evaluate(id => __T.collectSheet(id), await page.evaluate(() => __T.S.customers[0].id)); await wait(150);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-pco][aria-pressed="true"]').dataset.pco), "wl");
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

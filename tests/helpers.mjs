@@ -17,7 +17,7 @@ export function playwright() {
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp" };
 // everything the tests reach inside the app's script (functions, and S through a getter)
-const HOOK = `window.__T={get S(){return S},set S(v){S=v},balance,stmtData,monthData,reportText,routeList,daySummary,mapsUrl,splitOrderText,parseOrderLine,matchProducts,total,ordOn,custLedger,parseNoteLine,matchCust,sameName,dupPairs,unsentPays,orderMoney,markSent,
+const HOOK = `window.__T={get S(){return S},set S(v){S=v},balance,stmtData,coSplit,coColor,takeCo,monthData,reportText,routeList,daySummary,mapsUrl,splitOrderText,parseOrderLine,matchProducts,total,ordOn,custLedger,parseNoteLine,matchCust,sameName,dupPairs,unsentPays,orderMoney,markSent,
   mergeSheet,multiSendSheet,collectSheet,noteSheet,orderEditor,sendSheet,ledgerSheet,go,render,save,closeSheet,signedIn,alerts};\n`;
 
 // serves ./public on a free port; index.html gets the hook right before the app boots

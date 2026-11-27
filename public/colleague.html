@@ -44,6 +44,7 @@ li .nm{flex:1;min-width:0}
 li .code{color:var(--muted);font-size:13px;direction:ltr;unicode-bidi:isolate}
 li small{display:block;color:var(--muted);font-size:13px}
 li .q{flex:none;font-weight:800;white-space:nowrap}
+.cotag{display:inline-block;color:var(--co);background:color-mix(in srgb,var(--co) 14%,transparent);border-radius:6px;padding:0 6px;font-size:12px;font-weight:800}
 .num{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums lining-nums}
 .tot{display:flex;justify-content:space-between;padding-top:8px;font-size:15px}
 .tot.net{font-weight:800;font-size:17px}
@@ -73,7 +74,7 @@ const TOKEN=location.pathname.split("/").filter(Boolean)[1]||"";
 const STEPS=[["sent","جديدة","اتبعت","اتسجل على السيستم"],["registered","اتسجلت","اتسجل","اتشحن"],["shipped","اتشحنت","اتشحن","اتسلم للعميل"],["delivered","اتسلمت","اتسلم",null]];
 const NEXT={sent:"registered",registered:"shipped",shipped:"delivered"};
 const PAY={cash:"كاش",credit:"آجل"};
-const CAT=(self.CATALOG&&self.CATALOG.products)||[],PMAP=Object.fromEntries(CAT.map(p=>[p.id,p])),CO=Object.fromEntries(((self.CATALOG&&self.CATALOG.companies)||[]).map(c=>[c.id,c.name]));
+const CAT=(self.CATALOG&&self.CATALOG.products)||[],PMAP=Object.fromEntries(CAT.map(p=>[p.id,p])),CO=Object.fromEntries(((self.CATALOG&&self.CATALOG.companies)||[]).map(c=>[c.id,c.name])),COC=Object.fromEntries(((self.CATALOG&&self.CATALOG.companies)||[]).map(c=>[c.id,c.color||"#868E96"]));
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fm=n=>(Math.round(n*100)/100).toLocaleString("en-US",{maximumFractionDigits:2});
@@ -90,6 +91,7 @@ function money(o){const auto=o.items.reduce((a,i)=>a+lineTotal(i),0),sub=o.subMa
 const tags=i=>[i.color&&`اللون: ${i.color}`,i.light&&`الإضاءة: ${i.light}`].filter(Boolean).join(" · ");
 const code=i=>{const p=i.pid&&PMAP[i.pid];return p&&p.code||""};
 const coOf=i=>{const p=i.pid&&PMAP[i.pid];return p&&CO[p.co]||""};
+const coCol=i=>{const p=i.pid&&PMAP[i.pid];return p&&COC[p.co]||""};
 // the order as text, to paste into the company system
 function text(o){const c=o.cust,m=money(o);
   return [`طلب #${o.no}`,`العميل: ${c.name}${c.owner?` (${c.owner})`:""}`,c.area?`المنطقة: ${c.area}`:null,"",
@@ -115,7 +117,7 @@ function card(o){const c=o.cust,m=money(o),s=STEPS.find(x=>x[0]===o.status),nx=N
     <span class="s">${esc([c.owner,c.area].filter(Boolean).join(" · "))}${c.phone?` · <a href="tel:${esc(c.phone)}" class="num">${esc(c.phone)}</a>`:""}</span><br>
     <span class="s">طلب #<span class="num">${o.no}</span> · اتبعت ${esc(when(o.hist.sent||o.created))}</span></div><span class="pill st-${o.status}">${s[2]}</span></div>
     ${o.pay||m.disc?`<div class="tags">${o.pay?`<span class="tag hl">الدفع: ${PAY[o.pay]}</span>`:""}${m.disc?`<span class="tag hl">خصم العميل ${fm(m.pct)}%</span>`:""}</div>`:""}
-    <ul>${o.items.map(i=>`<li><span class="nm">${esc(i.name||"منتج")}${code(i)?` <span class="code">${esc(code(i))}</span>`:""}${coOf(i)?`<small>${esc(coOf(i))}</small>`:""}${tags(i)?`<small><b>${esc(tags(i))}</b></small>`:""}${i.note?`<small>ملحوظة: ${esc(i.note)}</small>`:""}</span>
+    <ul>${o.items.map(i=>`<li style="${coCol(i)?`border-inline-start:4px solid ${coCol(i)};padding-inline-start:8px`:""}"><span class="nm">${esc(i.name||"منتج")}${code(i)?` <span class="code">${esc(code(i))}</span>`:""}${coOf(i)?` <span class="cotag" style="--co:${coCol(i)}">${esc(coOf(i))}</span>`:""}${tags(i)?`<small><b>${esc(tags(i))}</b></small>`:""}${i.note?`<small>ملحوظة: ${esc(i.note)}</small>`:""}</span>
       <span class="q"><span class="num">${i.qty}</span> ${unitName(i)}${i.unit==="ك"&&i.per?`<small class="num">(${i.per} قطعة)</small>`:""}</span></li>`).join("")}</ul>
     ${m.sub?`<div class="tot"><span>المجموع</span><span><span class="num">${fm(m.sub)}</span> ج</span></div>${m.disc?`<div class="tot"><span>الخصم</span><span><span class="num">${fm(m.disc)}</span> ج</span></div>`:""}<div class="tot net"><span>الإجمالي</span><span><span class="num">${fm(m.net)}</span> ج</span></div>`:""}
     ${o.note?`<div class="note">ملاحظة: ${esc(o.note)}</div>`:""}
