@@ -188,3 +188,14 @@ test("in the app: sign up shows the code; «نسيت الباسورد؟» with i
   assert.deepEqual(errs, []);
   await b.close();
 });
+
+test("error reports from phones are stored once per error, counted, and tied to the account", async () => {
+  const T = (await post("/api/signup", { email: email(), password: "abc123" })).body.token;
+  const e = { kind: "error", msg: "Cannot read properties of null (reading 'boom')", src: "index.html", line: 1234, col: 5, stack: "TypeError…", ver: 49, view: "money", ua: "Mozilla/5.0 (Linux; Android 13)" };
+  assert.equal((await post("/api/err", { errors: [e] })).status, 200);
+  assert.equal((await post("/api/err", { errors: [e, { ...e, line: 99 }] }, T)).status, 200);
+  assert.equal((await post("/api/err", { nonsense: true })).status, 200);
+  const rows = JSON.parse(wr(["d1", "execute", "salesgo", "--local", "--persist-to", dir, "--json", "--command", "SELECT line, count, user_id FROM errors ORDER BY line"]).stdout)[0].results;
+  assert.deepEqual(rows.map(r => [r.line, r.count]), [[99, 1], [1234, 2]]);
+  assert.ok(rows.every(r => r.user_id), "the signed-in report wasn't tied to the account");
+});

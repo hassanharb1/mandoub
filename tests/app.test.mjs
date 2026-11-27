@@ -155,3 +155,14 @@ test("the colleague's page opens and explains a missing link", async () => {
   assert.deepEqual(errs, []);
   await page.context().close();
 });
+
+test("a crash is reported: queued with its details (sent to /api/err when the server answers), the same one only once", async () => {
+  const page = await phone(b, srv.url);
+  await page.evaluate(() => { localStorage.removeItem("mandoub.errq"); setTimeout(() => { null.boom(); }, 0); setTimeout(() => { null.boom(); }, 0); });
+  await wait(400);
+  const q = await page.evaluate(() => JSON.parse(localStorage.getItem("mandoub.errq") || "[]"));
+  assert.equal(q.length, 1, "the same error was queued twice");
+  assert.match(q[0].msg, /null/); assert.equal(q[0].ver > 0, true); assert.equal(q[0].view, "home");
+  assert.equal(await page.evaluate(() => !!document.querySelector("#bootErr")), true, "the red banner didn't show");
+  await page.context().close();
+});

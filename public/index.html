@@ -428,14 +428,28 @@ textarea.note{min-height:150px;font-size:16px;line-height:1.9}
 // if anything breaks, say so on screen so the rep can send a screenshot instead of staring at a blank page
 window.addEventListener("error",e=>{try{let el=document.getElementById("bootErr");if(!el){el=document.createElement("div");el.id="bootErr";
   el.style.cssText="position:fixed;left:12px;right:12px;top:12px;z-index:999;background:#B23A2E;color:#fff;padding:12px 14px;border-radius:12px;font:600 14px/1.6 system-ui,sans-serif;direction:rtl";
-  document.body.appendChild(el)}el.textContent="حصلت مشكلة في التطبيق. صوّر الشاشة دي وابعتها: "+(e.message||"")+" ("+(e.filename||"").split("/").pop()+":"+(e.lineno||"")+")"}catch(x){}});
+  document.body.appendChild(el)}el.textContent="حصلت مشكلة في التطبيق. صوّر الشاشة دي وابعتها: "+(e.message||"")+" ("+(e.filename||"").split("/").pop()+":"+(e.lineno||"")+")"}catch(x){}
+  reportErr("error",e.message,e.filename,e.lineno,e.colno,e.error&&e.error.stack)});
+/* errors also go to the server (/api/err), so MESTK sees them without a screenshot: the same one once, at most 10 per open,
+   kept in localStorage ("mandoub.errq", last 20) and sent when there's internet. Defined here, first, so boot errors are caught too. */
+function reportErr(kind,msg,src,line,col,stack){try{const k=msg+"|"+src+"|"+line;if(reportErr.seen[k]||reportErr.n>=10)return;reportErr.seen[k]=1;reportErr.n++;
+  const r={kind,msg:String(msg||"").slice(0,300),src:String(src||"").split("/").pop().split("?")[0].slice(0,80),line:+line||0,col:+col||0,stack:String(stack||"").slice(0,1500),at:Date.now(),
+    ver:(window.__app&&window.__app().ver)||0,view:(window.__app&&window.__app().view)||"",ua:navigator.userAgent.slice(0,200),online:navigator.onLine};
+  const q=JSON.parse(localStorage.getItem("mandoub.errq")||"[]");q.push(r);localStorage.setItem("mandoub.errq",JSON.stringify(q.slice(-20)));setTimeout(flushErr,1500)}catch(x){}}
+reportErr.seen={};reportErr.n=0;
+function flushErr(){try{const q=JSON.parse(localStorage.getItem("mandoub.errq")||"[]");if(!q.length||!navigator.onLine)return;
+  let tok="";try{tok=JSON.parse(localStorage.getItem("mandoub.sync")||"{}").token||""}catch(x){}
+  fetch("/api/err",{method:"POST",keepalive:true,headers:{"content-type":"application/json",...(tok?{authorization:"Bearer "+tok}:{})},body:JSON.stringify({errors:q})})
+    .then(r=>{if(r.ok)localStorage.removeItem("mandoub.errq")}).catch(()=>{})}catch(x){}}
+window.addEventListener("unhandledrejection",e=>{const r=e.reason||{};if(r&&r.name==="AbortError")return;reportErr("promise",r.message||String(r),"",0,0,r.stack)});
+setTimeout(flushErr,5000);window.addEventListener("online",flushErr);
 </script>
 <script src="catalog.js"></script>
 <script>
 (function(){
 "use strict";
 const DAY=864e5, KEY="mandoub.v1";
-const VERSION=48; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
+const VERSION=49; // must match CACHE "mandoub-vN" in sw.js; bump both on every release
 const STATUSES=[
   {k:"draft",t:"لسه ما اتبعتش",next:"اتبعت"},
   {k:"sent",t:"اتبعت للشركة",next:"اتسجل على السيستم"},
@@ -624,6 +638,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-mic]");if(
 
 /* ---------- routing ---------- */
 let route={v:"home"},filt={orders:"open",cq:"",oc:"الكل"};
+window.__app=()=>({ver:VERSION,view:route.v}); // for the error reports (reportErr lives outside this function)
 const TABS=["home","customers","orders","products","money"];let backHist=[];
 function go(v,arg){if(TABS.includes(v))backHist=[];else if(route.v!==v||route.arg!==arg)backHist.push(route);
   route={v,arg};render();window.scrollTo(0,0);backGuard()}
